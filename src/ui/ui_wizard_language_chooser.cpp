@@ -36,11 +36,17 @@ static const char* WELCOME_TRANSLATIONS[] = {
     "Benvenuto!",        // it
     "欢迎！",            // zh
     "ようこそ！",        // ja
+    "Hoş geldiniz!",    // tr
 };
-static constexpr int WELCOME_COUNT = 9;
+static constexpr int WELCOME_COUNT =
+    static_cast<int>(sizeof(WELCOME_TRANSLATIONS) / sizeof(WELCOME_TRANSLATIONS[0]));
 
 // Language codes for saving to config (matches button order in XML)
-static const char* LANGUAGE_CODES[] = {"en", "de", "fr", "es", "ru", "pt", "it", "zh", "ja"};
+static const char* LANGUAGE_CODES[] = {"en", "de", "fr", "es", "ru",
+                                       "pt", "it", "zh", "ja", "tr"};
+static constexpr int LANGUAGE_COUNT =
+    static_cast<int>(sizeof(LANGUAGE_CODES) / sizeof(LANGUAGE_CODES[0]));
+static_assert(LANGUAGE_COUNT == WELCOME_COUNT, "Language and welcome tables must stay aligned");
 
 // Timer period for cycling welcome text
 static constexpr uint32_t WELCOME_CYCLE_MS = 2500;
@@ -173,7 +179,7 @@ static void on_language_selected(lv_event_t* e) {
     }
 
     int index = std::atoi(user_data_str);
-    if (index < 0 || index >= 9) { // 9 languages total
+    if (index < 0 || index >= LANGUAGE_COUNT) {
         spdlog::warn("[Wizard Language Chooser] Invalid language index: {}", index);
         return;
     }

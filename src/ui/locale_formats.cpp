@@ -32,6 +32,7 @@ static const std::unordered_map<std::string, const char*> k_locale_map = {
     {"en", "en_US.UTF-8"}, {"de", "de_DE.UTF-8"}, {"fr", "fr_FR.UTF-8"},
     {"es", "es_ES.UTF-8"}, {"ru", "ru_RU.UTF-8"}, {"pt", "pt_BR.UTF-8"},
     {"it", "it_IT.UTF-8"}, {"zh", "zh_CN.UTF-8"}, {"ja", "ja_JP.UTF-8"},
+    {"tr", "tr_TR.UTF-8"},
 };
 
 // ---------------------------------------------------------------------------
@@ -49,6 +50,7 @@ static const std::unordered_map<std::string, std::array<const char*, 7>> k_day_a
     {"it", {{"dom.", "lun.", "mar.", "mer.", "gio.", "ven.", "sab."}}},
     {"zh", {{u8"日", u8"一", u8"二", u8"三", u8"四", u8"五", u8"六"}}},
     {"ja", {{u8"日", u8"月", u8"火", u8"水", u8"木", u8"金", u8"土"}}},
+    {"tr", {{"Paz", "Pzt", "Sal", u8"Çar", "Per", "Cum", "Cmt"}}},
 };
 
 // Month abbreviations indexed by tm_mon (0 = January)
@@ -78,6 +80,9 @@ static const std::unordered_map<std::string, std::array<const char*, 12>> k_mont
     {"ja",
      {{u8"1月", u8"2月", u8"3月", u8"4月", u8"5月", u8"6月", u8"7月", u8"8月", u8"9月", u8"10月",
        u8"11月", u8"12月"}}},
+    {"tr",
+     {{"Oca", u8"Şub", "Mar", "Nis", "May", "Haz", "Tem", u8"Ağu", "Eyl", "Eki", "Kas",
+       "Ara"}}},
 };
 
 // ---------------------------------------------------------------------------
@@ -103,7 +108,8 @@ static DatePatternGroup get_date_pattern(const std::string& lang) {
         return DatePatternGroup::DE;
     if (lang == "zh" || lang == "ja")
         return DatePatternGroup::CJK;
-    if (lang == "fr" || lang == "es" || lang == "pt" || lang == "it" || lang == "ru")
+    if (lang == "fr" || lang == "es" || lang == "pt" || lang == "it" || lang == "ru" ||
+        lang == "tr")
         return DatePatternGroup::ROMANCE_RU;
     // en and unknown languages
     return DatePatternGroup::EN;
@@ -114,7 +120,8 @@ static ModifiedDatePatternGroup get_modified_date_pattern(const std::string& lan
         return ModifiedDatePatternGroup::DE;
     if (lang == "zh" || lang == "ja")
         return ModifiedDatePatternGroup::CJK;
-    if (lang == "fr" || lang == "es" || lang == "pt" || lang == "it" || lang == "ru")
+    if (lang == "fr" || lang == "es" || lang == "pt" || lang == "it" || lang == "ru" ||
+        lang == "tr")
         return ModifiedDatePatternGroup::ROMANCE_RU;
     // en and unknown languages
     return ModifiedDatePatternGroup::EN;

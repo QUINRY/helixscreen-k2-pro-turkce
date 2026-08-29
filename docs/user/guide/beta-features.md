@@ -59,7 +59,7 @@ What works today:
 - Live printer status and bed mesh over WiFi through Moonraker
 - WiFi setup on first boot: the panel broadcasts its own setup hotspot — join it from your phone to configure the network
 - Over-the-air updates, with a fallback slot to recover a bad flash
-- All nine languages and the printer image set, packed to fit the panel's storage
+- All ten languages and the printer image set, packed to fit the panel's storage
 
 Not yet available on this target: the camera feed and QR features, the 2D G-code view, and the 3D bed mesh view.
 

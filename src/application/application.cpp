@@ -1822,7 +1822,7 @@ bool Application::init_translations() {
     // and the per-locale XML files loaded below.
 
     // Load ONLY the current locale's translations. Parsing the combined
-    // translations.xml with all 9 languages at startup burns ~500-700 KB of
+    // translations.xml with all bundled languages at startup burns ~500-700 KB of
     // heap in lv_translation_pack_t. Loading a single locale uses ~60-80 KB,
     // and other locales load on demand when the user switches language.
     // See helix::ui::ensure_translation_loaded().

@@ -229,6 +229,13 @@ TEST_CASE("Locale date formatting", "[clock_widget][i18n]") {
         REQUIRE(result.find(", 28 ") != std::string::npos);
     }
 
+    SECTION("Turkish: Day, DD Mon") {
+        helix::SystemSettingsManager::instance().set_language("tr");
+        helix::ui::locale_set_language("tr");
+        auto result = helix::ui::format_localized_date(&test_tm);
+        REQUIRE(result.find(", 28 ") != std::string::npos);
+    }
+
     SECTION("Unknown language falls back to English") {
         helix::SystemSettingsManager::instance().set_language("xx");
         helix::ui::locale_set_language("xx");

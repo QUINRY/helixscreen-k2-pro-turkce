@@ -15,7 +15,7 @@ HelixScreen is a touchscreen interface for Klipper 3D printers. It connects to y
 - 3D G-code preview, bed mesh visualization, frequency response charts
 - 7 multi-material backends (AFC, Happy Hare, ACE, AD5X IFS, CFS, Snapmaker U1, tool changers) with Spoolman integration
 - First-run wizard with auto-detection of 90+ printer models
-- Theme editor with 18 presets (dark and light), 9 languages
+- Theme editor with 18 presets (dark and light), 10 languages
 - Sound system, timelapse integration, label printing, exclude objects
 - Auto-detecting layout system for displays from 480x320 to 1024x600, including ultrawide and portrait
 - ~15MB RAM on embedded targets — designed for the modest hardware most people already own, no desktop required
@@ -117,7 +117,7 @@ For an exact layer count and a reliable time-remaining estimate, HelixScreen nee
 - Modern reactive architecture with 7 multi-material backends
 - 3D visualizations (G-code preview, bed mesh)
 - 90+ printer auto-detection database
-- 9 languages (English, German, Spanish, French, Italian, Japanese, Portuguese, Russian, Chinese)
+- 10 languages (English, German, Spanish, French, Italian, Japanese, Portuguese, Russian, Turkish, Chinese)
 
 ---
 
@@ -363,7 +363,7 @@ Your selection is saved to the `display.printer_image` config key and persists a
 
 ### What languages are supported?
 
-HelixScreen ships with 9 languages: English, German, Spanish, French, Italian, Japanese, Portuguese, Russian, and Chinese. Change the language in **Settings** → **Display & Sound** → **Language**.
+HelixScreen ships with 10 languages: English, German, Spanish, French, Italian, Japanese, Portuguese, Russian, Turkish, and Chinese. Change the language in **Settings** → **Display & Sound** → **Language**.
 
 ### Does HelixScreen collect any data?
 

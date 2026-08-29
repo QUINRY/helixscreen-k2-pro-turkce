@@ -3,6 +3,12 @@ assets/gcode/** linguist-vendored
 assets/test_gcodes/** linguist-vendored
 *.gcode linguist-vendored
 
+# Device-side scripts must retain Unix line endings when cloned on Windows.
+/install.sh text eol=lf
+/remove.sh text eol=lf
+/installer/*.py text eol=lf
+/tools/build_k2_turkish_*.py text eol=lf
+
 # Lesson usage counters are per-id maps that a text merge cannot combine:
 # each side's delta from the ancestor is real work, so they merge additively.
 # Needs the driver from `make setup`; unregistered, git falls back to a text

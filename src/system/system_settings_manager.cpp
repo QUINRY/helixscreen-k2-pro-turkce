@@ -42,11 +42,12 @@ static int spdlog_level_to_index(spdlog::level::level_enum level) {
 }
 
 // Language options - codes and display names
-// Order: en, de, fr, es, ru, pt, it, zh, ja (indices 0-8)
-static const char* LANGUAGE_CODES[] = {"en", "de", "fr", "es", "ru", "pt", "it", "zh", "ja"};
+// Order: en, de, fr, es, ru, pt, it, zh, ja, tr (indices 0-9)
+static const char* LANGUAGE_CODES[] = {"en", "de", "fr", "es", "ru",
+                                       "pt", "it", "zh", "ja", "tr"};
 static const int LANGUAGE_COUNT = sizeof(LANGUAGE_CODES) / sizeof(LANGUAGE_CODES[0]);
 static const char* LANGUAGE_OPTIONS_TEXT =
-    "English\nDeutsch\nFrançais\nEspañol\nРусский\nPortuguês\nItaliano\n中文\n日本語";
+    "English\nDeutsch\nFrançais\nEspañol\nРусский\nPortuguês\nItaliano\n中文\n日本語\nTürkçe";
 
 SystemSettingsManager& SystemSettingsManager::instance() {
     static SystemSettingsManager instance;

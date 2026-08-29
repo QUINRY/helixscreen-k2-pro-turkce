@@ -277,6 +277,7 @@ void AssetManager::register_images() {
     reg_img("flag_it", "assets/images/flags/flag_it.bin");
     reg_img("flag_zh", "assets/images/flags/flag_zh.bin");
     reg_img("flag_ja", "assets/images/flags/flag_ja.bin");
+    reg_img("flag_tr", "assets/images/flags/flag_tr.bin");
 
     s_images_registered = true;
     spdlog::trace("[AssetManager] Images registered successfully");

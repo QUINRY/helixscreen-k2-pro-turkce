@@ -46,6 +46,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "SystemSettingsManager language index/code con
         REQUIRE(SystemSettingsManager::language_index_to_code(6) == "it");
         REQUIRE(SystemSettingsManager::language_index_to_code(7) == "zh");
         REQUIRE(SystemSettingsManager::language_index_to_code(8) == "ja");
+        REQUIRE(SystemSettingsManager::language_index_to_code(9) == "tr");
     }
 
     SECTION("language_index_to_code out-of-range defaults to en") {
@@ -58,6 +59,7 @@ TEST_CASE_METHOD(LVGLTestFixture, "SystemSettingsManager language index/code con
         REQUIRE(SystemSettingsManager::language_code_to_index("de") == 1);
         REQUIRE(SystemSettingsManager::language_code_to_index("fr") == 2);
         REQUIRE(SystemSettingsManager::language_code_to_index("ja") == 8);
+        REQUIRE(SystemSettingsManager::language_code_to_index("tr") == 9);
     }
 
     SECTION("language_code_to_index unknown code defaults to 0") {
@@ -145,4 +147,5 @@ TEST_CASE_METHOD(LVGLTestFixture, "SystemSettingsManager language options string
     std::string opts(options);
     REQUIRE(opts.find("English") == 0);
     REQUIRE(opts.find("Deutsch") != std::string::npos);
+    REQUIRE(opts.find("Türkçe") != std::string::npos);
 }

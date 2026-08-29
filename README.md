@@ -1,300 +1,159 @@
 <p align="center">
-  <img src="assets/images/helix-icon-256.png" alt="HelixScreen" width="128"/>
-  <br>
-  <h1 align="center">HelixScreen</h1>
-  <p align="center"><strong>A modern touch interface for Klipper 3D printers</strong></p>
-  <p align="center"><a href="https://helixscreen.org">helixscreen.org</a></p>
+  <img src="assets/images/helix-icon-256.png" alt="HelixScreen" width="112">
+</p>
+
+<h1 align="center">K2 Pro için Türkçe HelixScreen</h1>
+
+<p align="center">
+  Creality K2 Pro ekranında seçilebilir, UTF-8 destekli Türkçe arayüz ve CFS desteği.
 </p>
 
 <p align="center">
-  <a href="https://github.com/prestonbrown/helixscreen/actions/workflows/build.yml"><img src="https://github.com/prestonbrown/helixscreen/actions/workflows/build.yml/badge.svg?branch=main" alt="Build"></a>
-  <a href="https://github.com/prestonbrown/helixscreen/actions/workflows/quality.yml"><img src="https://github.com/prestonbrown/helixscreen/actions/workflows/quality.yml/badge.svg?branch=main" alt="Code Quality"></a>
-  <a href="https://www.gnu.org/licenses/gpl-3.0"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a>
-  <a href="https://lvgl.io/"><img src="https://img.shields.io/badge/LVGL-9.5-green.svg" alt="LVGL"></a>
-  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey.svg" alt="Platform">
-  <a href="https://github.com/prestonbrown/helixscreen/releases"><img src="https://img.shields.io/github/v/release/prestonbrown/helixscreen?label=version" alt="Version"></a>
-  <a href="https://discord.gg/RZCT2StKhr"><img src="https://img.shields.io/discord/1472057991346782238?logo=discord&label=Discord&color=5865F2" alt="Discord"></a>
+  <a href="https://github.com/QUINRY/helixscreen-k2-pro-turkce/releases/latest"><img src="https://img.shields.io/github/v/release/QUINRY/helixscreen-k2-pro-turkce?label=sürüm" alt="Son sürüm"></a>
+  <a href="https://github.com/QUINRY/helixscreen-k2-pro-turkce/releases/latest"><img src="https://img.shields.io/github/downloads/QUINRY/helixscreen-k2-pro-turkce/total?label=indirme" alt="İndirme sayısı"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/lisans-GPLv3-blue.svg" alt="GPLv3 lisansı"></a>
+  <img src="https://img.shields.io/badge/test-Creality%20K2%20Pro-22b573" alt="Creality K2 Pro üzerinde test edildi">
 </p>
 
-Your printer can do way more than your current touchscreen lets you. Bed mesh visualization, input shaper graphs, multi-material management, print history — it's all trapped in a browser tab. HelixScreen puts it at your fingertips.
+![K2 Pro üzerinde Türkçe HelixScreen ana ekranı](docs/images/k2-turkish/home.png)
 
-Fast, beautiful, and frugal enough to run on hardware you already own — your printer's onboard SoC, a Raspberry Pi from a drawer, or anything newer.
+Bu çalışma, [HelixScreen](https://github.com/prestonbrown/helixscreen) projesinin Creality K2 Pro için hazırlanmış topluluk sürümüdür. Türkçe, ekranın dil menüsünden seçilebilir; CFS işlevleri korunur. Kurucu yazıcının durumunu denetler, paketin SHA-256 özetini doğrular ve baskı sırasında çalışmayı reddeder.
 
-Run it right on your printer, or on a separate device — a spare Pi, a mini PC, even your desktop — as a remote screen pointed at your printer's Moonraker over the network. Great for a floor-standing printer with a screen up on your desk.
+> [!IMPORTANT]
+> Yalnızca **Creality K2 Pro** üzerinde ve HelixScreen **0.99.117** tabanı ile test edildi. Kurulum için yazıcıda Root Erişimi ve SSH açık olmalıdır. İşleme başlamadan önce yazıcının boşta olduğundan emin olun.
 
----
+## Özellikler
 
-**Quick Links:** [Website](https://helixscreen.org) · [Features](#features) · [Screenshots](#screenshots) · [Installation](#installation) · [User Guide](docs/user/USER_GUIDE.md) · [FAQ](#faq) · [Contributing](CONTRIBUTING.md) · [Changelog](CHANGELOG.md) · [Discord](https://discord.gg/RZCT2StKhr)
+- Arayüzde seçilebilir **Türkçe** dili
+- 2.851 çevrilmiş metin ve UTF-8 Türkçe karakter desteği
+- Creality CFS ekranları ve çoklu filament iş akışları
+- Mevcut uyumlu HelixScreen kurulumunda ayarları koruyan, geri alınabilir Türkçe katman
+- HelixScreen kurulu değilse otomatik tam kurulum
+- Mevcut ekran ve ayarlar için otomatik geri dönüş yedeği
+- Paket bütünlüğü, cihaz mimarisi, Moonraker ve baskı durumu kontrolleri
+- Tek komutla güncelleme ve kaldırma
 
----
+## Hızlı kurulum
 
-## Why HelixScreen?
-
-- **Customizable dashboard** — Multi-page grid with drag-to-reposition, edge resize, and 30+ widgets including temperature graphs, fan arcs, and power toggles
-- **Every feature at your fingertips** — 30+ panels, 20+ overlays, 20+ modals, 300+ XML layouts
-- **~15MB RAM on embedded targets, ~75MB disk** — sips memory on a Creality K1 or Flashforge AD5M; a few times more on 64-bit Pi, still well under what other touchscreen UIs need. Your printer's onboard SoC or an older Pi is plenty — no need to buy new hardware.
-- **80+ printers in the database** — Auto-detects your hardware and configures itself
-- **Multi-material ready** — AFC, Happy Hare, ACE, AD5X IFS, CFS, Snapmaker U1, tool changers (incl. MedusaHC hotend changers), Spoolman
-- **Exclude objects** — Tap-to-exclude overhead map view with object outlines during prints
-- **Looks great** — Light/dark themes with 17 presets, responsive layouts, GPU-accelerated blur
-- **First-run wizard** — Guided setup discovers your printer's capabilities
-- **9 languages** — English, German, Spanish, French, Italian, Japanese, Portuguese, Russian, and Chinese
-
-<details>
-<summary><strong>Technical comparison</strong></summary>
-
-| Feature | HelixScreen | GuppyScreen | KlipperScreen |
-|---------|-------------|-------------|---------------|
-| UI Framework | LVGL 9 XML | LVGL 8 C | GTK 3 (Python) |
-| Declarative UI | Full XML with reactive bindings | C only | Python only |
-| RAM Usage | ~15MB (32-bit) | ~15-20MB | ~50MB |
-| Disk Size | ~75-115MB | ~60-80MB | ~50MB |
-| Multi-Material | 7 backends | Limited | Basic |
-| Printer Database | 80+ models | — | Manual config |
-| Display Layouts | Auto-detecting (480x320 to 1024x600, plus ultrawide and portrait) | Fixed | Configurable |
-| Internationalization | 9 languages | — | 40+ languages |
-| Status | 1.0 (active) | Inactive | Mature (maintenance) |
-| Language | C++17 | C | Python 3 |
-
-</details>
-
-## Screenshots
-
-### Home Panel
-<img src="docs/images/screenshot-home-panel.png" alt="Home Panel" width="800"/>
-
-### Print File Browser
-<img src="docs/images/screenshot-print-select-card.png" alt="Print Select" width="800"/>
-
-### Bed Mesh Visualization
-<img src="docs/images/screenshot-bed-mesh-panel.png" alt="Bed Mesh" width="800"/>
-
-<details>
-<summary><strong>More screenshots</strong></summary>
-
-### Controls Panel
-<img src="docs/images/screenshot-controls-panel.png" alt="Controls Panel" width="800"/>
-
-### Motion Controls
-<img src="docs/images/screenshot-motion-panel.png" alt="Motion Controls" width="800"/>
-
-### AMS / Filament Management
-<img src="docs/images/screenshot-ams-panel.png" alt="AMS Panel" width="800"/>
-
-### Input Shaper Results
-<img src="docs/images/screenshot-shaper-results.png" alt="Input Shaper Results" width="800"/>
-
-### PID Tuning
-<img src="docs/images/screenshot-pid-panel.png" alt="PID Tuning" width="800"/>
-
-### Settings
-<img src="docs/images/screenshot-settings-panel.png" alt="Settings" width="800"/>
-
-### First-Run Wizard
-<img src="docs/images/screenshot-wizard-wifi.png" alt="Setup Wizard" width="800"/>
-
-</details>
-
-See [docs/devel/GALLERY.md](docs/devel/GALLERY.md) for the full gallery.
-
-## Features
-
-**Dashboard** — Customizable multi-page grid with drag-to-reposition, edge resize, and a catalog of 30+ widgets. Temperature graphs, fan arcs, power toggles, camera feeds, active spool, favorite macros — add what matters, hide what doesn't. Per-breakpoint layout persistence.
-
-**Printer Control** — Print management with G-code preview, motion controls, temperature presets with per-material overrides, multi-fan control, Z-offset, speed/flow tuning, live filament consumption tracking, power device management.
-
-**Multi-Material** — 7 filament system backends: AFC (Box Turtle, ViViD), Happy Hare (ERCF, 3MS, Tradrack, Night Owl), ACE (Anycubic ACE Pro), AD5X IFS, Creality CFS, Snapmaker U1 (with RFID spool recognition), and tool changers — including MedusaHC hotend changers, whose dock sensors and filament feeder are driven on top of klipper-toolchanger. Multi-unit and multi-backend support. Full Spoolman integration with spool creation wizard.
-
-**Visualization** — 3D G-code layer preview with memory-aware geometry budgets, 3D bed mesh with async rendering, print thumbnails, frequency response charts, unified temperature graph.
-
-**Calibration** — Input shaper with frequency response charts, PID tuning with live graph, MPC calibration (Kalico), belt tension tuning, bed mesh, screws tilt adjust, Z-offset, firmware retraction, probe management.
-
-**Integrations** — HelixPrint plugin, power devices with quick-toggle, print history, timelapse (Moonraker plugin), exclude objects with tap-to-exclude map view, LED control (5 backends), sound alerts (SDL/PWM/M300), Bluetooth label printing (Brother QL/PT, Niimbot, MakeID).
-
-**Display** — Auto-detecting layout system (480x320 through 1024x600, plus ultrawide and portrait — see below), display rotation (0/90/180/270) with auto-detection, light/dark themes with 17 presets and live theme editor, GPU-accelerated backdrop blur, screensavers.
-
-**System** — First-run wizard with guided hardware discovery, 80+ printer models with auto-detection, 9 languages, opt-in crash reporting with debug bundles, KIAUH installer, versioned config migration.
-
-## Supported Platforms
-
-| Platform | Architecture | Status |
-|----------|-------------|--------|
-| Raspberry Pi 3/4/5, CM4, Zero 2 W (64-bit) | aarch64 | Tested |
-| Raspberry Pi 3/4 (32-bit) | armhf | Tested |
-| BTT Pad / CB1 / CB2 / Manta | aarch64 | Tested |
-| Creality K1 / K1C / K1 Max | MIPS32 | Tested |
-| Creality K2 Pro / K2 Plus / K2 SE | ARM (musl) | Tested |
-| Creality Sonic Pad | armhf | Tested |
-| Flashforge AD5M / AD5M Pro | armv7-a | Tested |
-| Flashforge AD5X | MIPS32 | Tested |
-| Snapmaker U1 (SnapSwap toolchanger) | aarch64 | Tested³ |
-| QIDI Q2, Max 4 | aarch64 | Supported¹ |
-| Sovol SV06 / SV08 | Pi build | Tested |
-| Elegoo Centauri Carbon | armv7-a | Tested² |
-| x86 Mini PC (Debian) | x86_64 | Tested |
-| macOS / Linux desktop | x86_64 / ARM64 | Development / CI |
-| Android phone / tablet | arm64 / x86_64 | Experimental⁴ |
-
-¹ QIDI models with Linux framebuffer displays (Q2, Max 4) only. Stock firmware runs standard Moonraker and works directly; community firmware like [FreeDi](https://github.com/Phil1988/FreeDi), [53Aries/Q2-Firmware](https://github.com/53Aries/Q2-Firmware), or [FreeQIDI](https://github.com/Phil1988/FreeQIDI) is optional. Older models (X-Smart 3, X-Plus 3, X-Max 3, Q1 Pro, Plus 4) ship with QIDI's MKS PI smart-panel (a TJC serial HMI that *is* the UI; TJC is the Chinese OEM that Nextion licenses globally) and are **not compatible for on-device install** without a screen replacement — see [QIDI_SUPPORT.md → Display Compatibility](docs/devel/printers/QIDI_SUPPORT.md#display-compatibility) for why. Remote-control mode works on all six QIDI models regardless.
-
-² Elegoo Centauri Carbon requires the community [OpenCentauri COSMOS](https://github.com/OpenCentauri/cosmos) firmware ([docs](https://docs.opencentauri.cc/klipper-conversion/cosmos/cosmos/); stock Elegoo firmware has no SSH, Klipper, or Moonraker). Ships with factory white-balance calibration for the 4.3" panel.
-
-³ Snapmaker U1 needs SSH access. Stock firmware (1.2+) provides it via the **Root access** option in printer settings; the community [PAXX Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware) enables SSH by default and is the easiest path. Tested on PAXX 1.3.x/1.4.x; stock-firmware support is newly added. Reinstall HelixScreen after any firmware update — it resets system files and the stock screen returns until you reinstall.
-
-⁴ Android is a **remote** client only. It monitors and controls a printer over your network and does not replace a printer's own panel. Needs Android 9.0 or newer, and runs in landscape. Not on Google Play yet, so you install the APK yourself from a [GitHub release](https://github.com/prestonbrown/helixscreen/releases/latest). See [Android app](docs/user/INSTALL.md#android-app-experimental).
-
-## Installation
-
-> **Run these commands on whatever machine will drive the display.**
-> For an on-printer screen, that's your printer's host — SSH into your Raspberry Pi, BTT board, or (for all-in-one printers like Creality K1/K2, Flashforge AD5M/Pro) directly into the printer.
-> For a **remote screen** on a separate device (a spare Pi, mini PC, etc.), run them there instead, then point it at your printer's Moonraker (IP + port `7125`) in the setup wizard. See [Remote screen setup](docs/user/INSTALL.md#remote-screen-setup-run-on-a-separate-device).
-
-**One-line install:**
-```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh
-```
-
-The installer auto-detects your platform, downloads the correct binary, sets up the service, and launches the first-run wizard. To update:
-```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --update
-```
-
-To install or roll back to a specific release (e.g. a last-known-good version), pass `--version` with the tag:
-```bash
-curl -sSL https://raw.githubusercontent.com/prestonbrown/helixscreen/main/scripts/install.sh | sh -s -- --version v0.99.111
-```
-
-Add `--clean` to wipe HelixScreen's settings and start fresh (it asks for confirmation first; your Klipper/Moonraker config and G-code are untouched). Combine the two to reinstall a specific version with default settings: `--clean --version v0.99.111`.
-
-Also available through [KIAUH](https://github.com/dw-0/kiauh) as an extension.
-
-**Flashforge AD5M/Pro:** We provide a [ready-made firmware image](https://github.com/prestonbrown/ff5m) (Forge-X fork with HelixScreen pre-configured) — just flash from a USB drive. Or install manually on an existing Forge-X/Klipper Mod setup.
-
-**Android (experimental):** There is an Android build for watching and controlling a printer from a phone or tablet. It is not on Google Play yet, so download the APK from the [latest release](https://github.com/prestonbrown/helixscreen/releases/latest) and install it. `helixscreen-android-arm64-v<VERSION>.apk` covers essentially any modern phone or tablet. Nothing gets installed on the printer; the app just needs to reach Moonraker on your network. See [Android app](docs/user/INSTALL.md#android-app-experimental).
-
-See the [Installation Guide](docs/user/INSTALL.md) for detailed instructions, display configuration, and troubleshooting.
-
-## Development
-
-**Want to contribute? Start at [CONTRIBUTING.md](CONTRIBUTING.md)** — it routes you by what you want to do. New contributors follow a marked path: onboarding (environment + build + a 15-minute mental model) → an annotated first contribution → the per-subsystem architecture guide.
-
-The short version, if you just want to see it run:
+Yazıcının IP adresini bulun ve aşağıdaki komutta `YAZICI_IP` bölümünü değiştirin. MobaXterm, Linux veya macOS terminalinde:
 
 ```bash
-# Check/install dependencies
-make check-deps && make install-deps
-
-# Build
-make -j
-
-# Run with mock printer (no hardware needed) — 'S' takes a screenshot;
-# -v (INFO), -vv (DEBUG), -vvv (TRACE) for logging
-./build/bin/helix-screen --test -vv
-
-# Run tests
-make test-run
+curl -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/main/install.sh \
+  | ssh root@YAZICI_IP 'sh -s -- --yes'
 ```
 
-XML layouts hot-reload by default on native builds — edit `ui_xml/*.xml`, save, watch the running UI update live.
+Windows PowerShell kullanıyorsanız:
 
-**Test suite:** 5,000+ test cases across 600+ test files covering printer state, UI components, XML parsing, multi-material, and more.
+```powershell
+curl.exe -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/main/install.sh |
+  ssh root@YAZICI_IP "sh -s -- --yes"
+```
 
-For the daily-workflow reference (run flags, logging, config, IDE setup), see [docs/devel/DEVELOPMENT.md](docs/devel/DEVELOPMENT.md).
+SSH parolası istendiğinde yazıcının **Root hesabı** ekranında gösterilen parolayı girin. Kurulum tamamlandığında HelixScreen yeniden başlatılır ve Türkçe seçilir.
 
-## FAQ
+Kurucu otomatik olarak doğru yolu seçer:
 
-**How is this different from GuppyScreen/KlipperScreen?**
-More features, far lower RAM use (~15MB on embedded targets vs ~50MB for KlipperScreen), and actively developed. The lighter footprint means the printer you have or a Pi you've owned for years is plenty — no need to chase new SBC hardware. See the [comparison table](#why-helixscreen).
+| Yazıcının mevcut durumu | Yapılan işlem | Kaldırıldığında |
+| --- | --- | --- |
+| HelixScreen 0.99.117 kurulu | Yalnız Türkçe katman uygulanır; ekran ve CFS ayarları korunur | Önceki HelixScreen geri gelir |
+| HelixScreen kurulu değil | Türkçe tam K2 paketi kurulur | Stok Creality arayüzü geri gelir |
 
-**Can I run HelixScreen on a separate device instead of on my printer?**
-Yes. Install it on any supported Linux device — a spare Pi, a mini PC, even your desktop — and enter your printer's IP in the wizard's Moonraker step. This is ideal when the printer is on the floor and you want the screen at your desk. Point it at Moonraker (port `7125`), not Mainsail/Fluidd. See [Remote screen setup](docs/user/INSTALL.md#remote-screen-setup-run-on-a-separate-device).
+### Ön kontrol
 
-**Which printers are supported?**
-Any Klipper + Moonraker printer. 80+ models in the auto-detection database spanning Voron, Creality, QIDI, Anycubic, Flashforge, Sovol, RatRig, FLSUN, Elegoo, Prusa, Snapmaker, and more. The wizard auto-discovers your printer's capabilities even if it's not in the database.
+Değişiklik yapmadan uyumluluğu denetlemek için:
 
-**What screen sizes are supported?**
-800x480 and 1024x600 are the well-tested landscape sizes; 480x320 runs but is tight in places. Display rotation (0/90/180/270) with auto-detection.
+```bash
+curl -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/main/install.sh \
+  | ssh root@YAZICI_IP 'sh -s -- --check'
+```
 
-**Ultrawide (e.g. 1920x480) and portrait (e.g. 480x800) both work.** The layout engine detects either orientation and adapts the navigation bar and grid sizing to it. Portrait also has dedicated layouts for the app shell, navigation bar, print status and print tune; panels without a dedicated layout use the adaptive fallback, which is why landscape is still the most polished of the three. Both keep gaining per-panel work, and both are open for contributions that need only XML, not C++ — see the [UI Contributor Guide](docs/devel/UI_CONTRIBUTOR_GUIDE.md).
+### Güncelleme
 
-**What multi-material systems work?**
-AFC (Box Turtle, ViViD), Happy Hare (ERCF, 3MS, Tradrack, Night Owl), ACE (Anycubic ACE Pro), AD5X IFS, Creality CFS, Snapmaker U1 (with RFID spool recognition), and tool changers (viesturz/klipper-toolchanger, including MedusaHC hotend changers). Full Spoolman integration for spool management.
+Yeni bir sürüm çıktığında hızlı kurulum komutunu yeniden çalıştırmanız yeterlidir. Uyumlu olmayan bir HelixScreen sürümü algılanırsa kurucu dosyalara dokunmadan durur.
 
-See [docs/user/FAQ.md](docs/user/FAQ.md) for the full FAQ.
+## Kaldırma
 
-## Troubleshooting
+MobaXterm, Linux veya macOS terminalinde:
 
-| Issue | Solution |
-|-------|----------|
-| SDL2 or build tools missing | `make install-deps` |
-| Submodule empty | `git submodule update --init --recursive` |
-| Can't connect to Moonraker | Check IP/port in settings.json |
-| Wizard not showing | Delete settings.json to trigger it |
-| Display upside down | Set rotation in settings or check `panel_orientation` in `/proc/cmdline` |
+```bash
+curl -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/main/remove.sh \
+  | ssh root@YAZICI_IP 'sh -s -- --yes'
+```
 
-See [docs/user/TROUBLESHOOTING.md](docs/user/TROUBLESHOOTING.md) for more solutions, or open a [GitHub issue](https://github.com/prestonbrown/helixscreen/issues).
+Windows PowerShell'de:
 
-## Documentation
+```powershell
+curl.exe -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/main/remove.sh |
+  ssh root@YAZICI_IP "sh -s -- --yes"
+```
 
-### User Guides
-| Guide | Description |
-|-------|-------------|
-| [Installation](docs/user/INSTALL.md) | Setup for Pi, Sonic Pad, K1, K2, AD5M, AD5X, QIDI |
-| [User Guide](docs/user/USER_GUIDE.md) | Using HelixScreen — panels, overlays, settings |
-| [Configuration](docs/user/CONFIGURATION.md) | All settings with examples |
-| [Upgrading](docs/user/UPGRADING.md) | Version upgrade instructions |
-| [FAQ](docs/user/FAQ.md) | Common questions |
-| [Troubleshooting](docs/user/TROUBLESHOOTING.md) | Problem solutions |
-| [Telemetry & Privacy](docs/user/TELEMETRY.md) | What data is collected (opt-in) |
+Kaldırmadan önce yalnız kontrol yapmak için son parametreyi `--check` olarak değiştirin. Kurulumdan önce oluşturulan yedekler `/mnt/UDISK/helixscreen-turkish-backups/` altında tutulur.
 
-### Developer Guides
-| Guide | Description |
-|-------|-------------|
-| [Development](docs/devel/DEVELOPMENT.md) | Daily workflow: run flags, logging, config, IDE setup |
-| [Architecture](docs/devel/ARCHITECTURE.md) | Whole-app model + guide to the 15 architecture chapters |
-| [LVGL9 XML Guide](docs/devel/LVGL9_XML_GUIDE.md) | XML syntax reference |
-| [UI Contributor Guide](docs/devel/UI_CONTRIBUTOR_GUIDE.md) | Breakpoints, tokens, colors, widgets |
-| [Changelog](CHANGELOG.md) | Release history |
-| [Roadmap](https://github.com/prestonbrown/helixscreen/issues) | Feature timeline (labeled issues) |
+## Çevrimdışı kurulum
 
-## Community
+[Son sürüm](https://github.com/QUINRY/helixscreen-k2-pro-turkce/releases/latest) sayfasından uygun paketi indirin:
 
-**[Join the HelixScreen Discord](https://discord.gg/RZCT2StKhr)** — Get help, share your setup, request features, and follow development.
+- Mevcut HelixScreen 0.99.117 için: `helixscreen-k2-tr-overlay.zip`
+- HelixScreen kurulu olmayan K2 Pro için: `helixscreen-k2.zip`
 
-**Also discussed in:**
-- [FuriousForging Discord](https://discord.gg/Cg4yas4V) — #mods-and-projects ([jump to HelixScreen topic](https://discord.com/channels/1323351124069191691/1444485365376352276))
-- [VORONDesign Discord](https://discord.gg/voron) — #voc_works ([jump to HelixScreen topic](https://discord.com/channels/460117602945990666/1468467369407156346))
+Paketi yazıcıya kopyalayın ve kurucuyu yerel dosyayla çalıştırın:
 
-### Co-Maintainers Wanted
+```bash
+scp helixscreen-k2-tr-overlay.zip root@YAZICI_IP:/mnt/UDISK/
+curl -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/main/install.sh \
+  | ssh root@YAZICI_IP 'sh -s -- --local /mnt/UDISK/helixscreen-k2-tr-overlay.zip --yes'
+```
 
-We're looking for co-maintainers to help grow HelixScreen! You can contribute broadly across the project or own a specific area that interests you:
+HelixScreen yazıcıda yoksa aynı komutta tam paket adını kullanın. Kurucu yanlış paket seçilirse SHA-256 kontrolünde güvenli biçimde durur.
 
-- **Printer support** — Maintain builds and testing for specific platforms (Creality, QIDI, Flashforge, etc.)
-- **Multi-material backends** — Own a filament system integration (AFC, Happy Hare, ACE, CFS, etc.)
-- **UI/UX** — Help design and implement panels, overlays, and responsive layouts
-- **Localization** — Maintain translations for your language
-- **Documentation** — Keep guides accurate and help new users get started
-- **Testing & CI** — Expand the test suite and maintain build infrastructure
+## Ekran görüntüleri
 
-If you're interested, join the [Discord](https://discord.gg/RZCT2StKhr) and introduce yourself, or open a [GitHub Discussion](https://github.com/prestonbrown/helixscreen/discussions).
+| Dil seçimi | Ayarlar |
+| --- | --- |
+| ![HelixScreen dil menüsünde Türkçe seçeneği](docs/images/k2-turkish/language-selector.png) | ![Türkçe HelixScreen ayarlar ekranı](docs/images/k2-turkish/settings.png) |
 
-**Bug Reports & Feature Requests:** [GitHub Issues](https://github.com/prestonbrown/helixscreen/issues) — please include your printer model and logs (`helix-screen -vv`) when reporting bugs.
+| Görüntü ayarları | CFS yönetimi |
+| --- | --- |
+| ![Türkçe görüntü ayarları](docs/images/k2-turkish/display-settings.png) | ![Türkçe CFS yönetim ekranı](docs/images/k2-turkish/cfs.png) |
 
-## License
+## Gereksinimler ve güvenlik
 
-GPL v3 — See [LICENSE](LICENSE) for details. Third-party components and their licenses are listed
-in [COPYRIGHT](COPYRIGHT).
+- Creality K2 Pro; `armv7l` sistem ve erişilebilir Moonraker
+- Yazıcının ayarlarından etkinleştirilmiş Root Erişimi/SSH
+- Boşta, tamamlanmış, iptal edilmiş veya hata durumundaki yazıcı
+- Paketleri indirmek için internet erişimi; çevrimdışı yöntemde yalnız yerel ağ
 
-One exception: **[`lib/helix-xml/`](lib/helix-xml/) is MIT**, not GPL. It is a permanent fork of the
-declarative XML UI engine that shipped inside LVGL core until v9.5 removed it and moved it to the
-commercial LVGL Pro. We forked from the last MIT commit (`a15dcbeb5`, 2026-01-26) and keep our own
-contributions to it under MIT so the engine stays usable as a standalone library. See
-[`lib/helix-xml/README.md`](lib/helix-xml/README.md).
+Kurucu `printing` veya `paused` durumunda çalışmaz. G-code dosyalarını değiştirmez veya silmez. `--force-print-state` seçeneği yalnız Moonraker durumu bilinçli olarak denetlenemediğinde kullanılmalıdır.
 
-## Acknowledgments
+## Sorun giderme
 
-**Inspired by:** [GuppyScreen](https://github.com/ballaswag/guppyscreen) (general architecture, LVGL-based approach), [KlipperScreen](https://github.com/KlipperScreen/KlipperScreen) (feature inspiration)
+Önce değişiklik yapmayan kontrolü çalıştırın:
 
-**Built with:** [LVGL 9.5](https://lvgl.io/), [Klipper](https://www.klipper3d.org/), [Moonraker](https://github.com/Arksine/moonraker), [libhv](https://github.com/ithewei/libhv), [spdlog](https://github.com/gabime/spdlog), [SDL2](https://www.libsdl.org/), and `helix-xml` (our MIT fork of LVGL's XML engine)
+```bash
+curl -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/main/install.sh \
+  | ssh root@YAZICI_IP 'sh -s -- --check'
+```
 
-**AI-Assisted Development:** Built with [Claude Code](https://github.com/anthropics/claude-code) by [Anthropic](https://www.anthropic.com/)
+- `Permission denied`: K2 Pro'da Root Erişimi'ni tekrar açın ve ekranda gösterilen güncel parolayı kullanın.
+- `Yazıcı şu anda printing/paused`: Baskının bitmesini veya güvenli biçimde iptal edilmesini bekleyin.
+- `Mevcut HelixScreen sürümü uyumlu değil`: Bu sürüm yalnız 0.99.117 tabanını destekler; dosyalar değiştirilmez.
+- Arayüz açılmıyorsa yazıcıyı yeniden başlatın. Sorun sürerse kaldırma komutu önceki arayüzü geri yükler.
+
+Bir hata bildirirken komut çıktısını, K2 Pro yazılım sürümünü ve HelixScreen sürümünü paylaşın; SSH parolanızı paylaşmayın.
+
+## Paket doğrulama
+
+`v0.99.117-tr.1` sürümünün SHA-256 değerleri:
+
+| Dosya | SHA-256 |
+| --- | --- |
+| `helixscreen-k2-tr-overlay.zip` | `384029a493be082d6265c82f5a77ce6e40da78b157b259850c80836adcfef2e3` |
+| `helixscreen-k2.zip` | `d2fe1daecbebbcb98fd705921a12095796cfb941f350cdf98a3ced0c750c9823` |
+
+Aynı özetler sürüm varlıklarındaki `SHA256SUMS` dosyasında da bulunur ve kurucu tarafından otomatik denetlenir.
+
+## Kaynak ve lisans
+
+Bu depo, Preston Brown ve HelixScreen katkıcılarının [özgün projesini](https://github.com/prestonbrown/helixscreen) temel alır. Kaynak kod ve Türkçe değişiklikler [GNU GPLv3](LICENSE) ile lisanslanmıştır. Bu, Creality tarafından yayımlanan veya desteklenen resmî bir ürün değildir.
+
+Çeviri veya K2 Pro uyumluluğu için katkılar ve hata bildirimleri memnuniyetle karşılanır.

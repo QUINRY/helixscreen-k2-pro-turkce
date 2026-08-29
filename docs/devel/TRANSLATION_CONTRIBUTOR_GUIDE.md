@@ -1,6 +1,6 @@
 # Translation Contributor Guide
 
-HelixScreen currently ships in nine languages — English, German, Spanish, French, Italian, Japanese, Portuguese, Russian, and Chinese. Every one of them exists because someone sat down with a YAML file and a coffee and did the work.
+HelixScreen currently ships in ten languages — English, German, Spanish, French, Italian, Japanese, Portuguese, Russian, Turkish, and Chinese. Every one of them exists because someone sat down with a YAML file and a coffee and did the work.
 
 This doc is for people who want to improve an existing translation, fix a bad one, or add a language that isn't there yet. You don't need to write any code. You do need to know the language you're translating into well enough to make judgment calls — especially around domain terminology (3D printing is vocabulary-heavy).
 
@@ -20,9 +20,10 @@ For the *implementation* of the translation system — how strings get from YAML
 | `ja` | `translations/ja.yml` | Japanese |
 | `pt` | `translations/pt.yml` | Portuguese |
 | `ru` | `translations/ru.yml` | Russian |
+| `tr` | `translations/tr.yml` | Turkish |
 | `zh` | `translations/zh.yml` | Chinese (Simplified) |
 
-All files have identical keys — every key in `en.yml` (~2,400 strings) — and differ only in their translated values. If English adds a new string, `make translation-sync` propagates the key to every other language file with the English value as a placeholder, marked for a human to fix.
+All files have identical keys — every key in `en.yml` (~2,850 strings) — and differ only in their translated values. If English adds a new string, `make translation-sync` propagates the key to every other language file with the English value as a placeholder, marked for a human to fix.
 
 ---
 
@@ -78,6 +79,7 @@ If a string is translated awkwardly, plainly wrong, or inconsistent with how tha
    | Japanese | [translations/ja.yml](https://github.com/prestonbrown/helixscreen/blob/main/translations/ja.yml) |
    | Portuguese | [translations/pt.yml](https://github.com/prestonbrown/helixscreen/blob/main/translations/pt.yml) |
    | Russian | [translations/ru.yml](https://github.com/prestonbrown/helixscreen/blob/main/translations/ru.yml) |
+   | Turkish | [translations/tr.yml](https://github.com/prestonbrown/helixscreen/blob/main/translations/tr.yml) |
    | Chinese | [translations/zh.yml](https://github.com/prestonbrown/helixscreen/blob/main/translations/zh.yml) |
 
 2. **Click the pencil icon** ✏️ at the top-right of the file view. You'll need a GitHub account (free, takes two minutes). If you've never edited this repo before, GitHub will quietly fork it for you and drop you into an in-browser editor — there's nothing to set up.

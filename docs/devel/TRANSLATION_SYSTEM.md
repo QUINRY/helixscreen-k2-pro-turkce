@@ -14,6 +14,7 @@ HelixScreen's translation system is built on LVGL's native XML translations. Sou
 | ja   | Japanese   |
 | pt   | Portuguese |
 | ru   | Russian    |
+| tr   | Turkish    |
 | zh   | Chinese    |
 
 ## Architecture
