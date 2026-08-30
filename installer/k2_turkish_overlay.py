@@ -22,9 +22,11 @@ import time
 import zipfile
 
 
-PACKAGE_VERSION = "v0.99.117-tr.1"
+PACKAGE_VERSION = "v0.99.118-tr.1"
+HELIXSCREEN_VERSION = "0.99.118"
 INSTALL_ROOT = "/opt/helixscreen"
 SETTINGS_PATH = INSTALL_ROOT + "/config/settings.json"
+RELEASE_INFO_PATH = INSTALL_ROOT + "/release_info.json"
 MARKER_PATH = INSTALL_ROOT + "/config/quinry-turkish-package.json"
 MANAGER_PATH = INSTALL_ROOT + "/config/quinry-turkish-manager.py"
 BACKUP_ROOT = "/mnt/UDISK/helixscreen-turkish-backups"
@@ -219,24 +221,98 @@ def restore_snapshot(root):
 
 
 def create_original_backup():
+    superseded_overlay = ""
     if os.path.isfile(MARKER_PATH):
         try:
             marker = read_json(MARKER_PATH)
             existing = marker.get("backup_dir", "")
-            if marker.get("mode") == "overlay" and safe_backup_dir(existing) and os.path.isdir(existing):
-                return existing
-        except Exception:
-            pass
+            if marker.get("mode") == "overlay":
+                if (
+                    marker.get("version") == PACKAGE_VERSION
+                    and safe_backup_dir(existing)
+                    and os.path.isdir(existing)
+                ):
+                    return existing
+
+                # The stock updater replaces the HelixScreen files but leaves
+                # this project's marker behind.  A new Turkish release must
+                # therefore back up the newly installed stock version, not
+                # reuse a backup from the previous release.
+                release = read_json(RELEASE_INFO_PATH)
+                release_version = str(release.get("version", ""))
+                if (
+                    release.get("project_owner") != "prestonbrown"
+                    or release_version.lstrip("v") != HELIXSCREEN_VERSION
+                ):
+                    raise RuntimeError(
+                        "A superseded Turkish marker exists, but the current "
+                        "HelixScreen installation is not the supported stock version"
+                    )
+                superseded_overlay = str(marker.get("version", "unknown"))
+        except RuntimeError:
+            raise
+        except Exception as error:
+            raise RuntimeError("Existing Turkish installation metadata is invalid: {}".format(error))
 
     if not os.path.isdir(BACKUP_ROOT):
         os.makedirs(BACKUP_ROOT)
     stamp = time.strftime("%Y%m%d-%H%M%S")
     backup = os.path.join(BACKUP_ROOT, "pre-turkish-{}-{}".format(stamp, os.getpid()))
     snapshot_targets(backup)
+
+    if superseded_overlay:
+        # The stale marker and manager belong to the previous Turkish release,
+        # not to the newly installed stock HelixScreen.  Treat them as absent
+        # so removing this release restores a clean stock installation.
+        absent_path = os.path.join(backup, "absent.json")
+        absent = read_json(absent_path)
+        stale_custom_files = (
+            (
+                "config/quinry-turkish-package.json",
+                os.path.join(backup, os.path.basename(MARKER_PATH)),
+            ),
+            (
+                "config/quinry-turkish-manager.py",
+                os.path.join(backup, os.path.basename(MANAGER_PATH)),
+            ),
+            (
+                "ui_xml/translations/tr.xml",
+                os.path.join(backup, "files", "ui_xml", "translations", "tr.xml"),
+            ),
+            (
+                "assets/images/flags/flag_tr.bin",
+                os.path.join(backup, "files", "assets", "images", "flags", "flag_tr.bin"),
+            ),
+            (
+                "assets/images/flags/flag_tr.png",
+                os.path.join(backup, "files", "assets", "images", "flags", "flag_tr.png"),
+            ),
+        )
+        for relative, saved in stale_custom_files:
+            if relative not in absent:
+                absent.append(relative)
+            if os.path.isfile(saved):
+                os.unlink(saved)
+        with open(absent_path, "w", encoding="utf-8") as handle:
+            json.dump(sorted(absent), handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+
+        # The stock updater may leave language=tr even though it removed the
+        # Turkish assets.  The clean rollback language is English; all other
+        # settings, including touch calibration and CFS data, stay unchanged.
+        saved_settings = os.path.join(backup, "settings.json")
+        settings = read_json(saved_settings)
+        if settings.get("language") == "tr":
+            settings["language"] = "en"
+            with open(saved_settings, "w", encoding="utf-8") as handle:
+                json.dump(settings, handle, ensure_ascii=False, indent=2)
+                handle.write("\n")
+
     manifest = {
         "created": stamp,
         "mode": "overlay",
         "package_version": PACKAGE_VERSION,
+        "superseded_overlay": superseded_overlay or None,
         "settings_sha256": sha256_file(os.path.join(backup, "settings.json")),
         "files": {},
     }

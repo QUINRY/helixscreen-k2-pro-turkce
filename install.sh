@@ -10,15 +10,15 @@ set -eu
 export PATH="/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 REPOSITORY="QUINRY/helixscreen-k2-pro-turkce"
-PACKAGE_VERSION="v0.99.117-tr.1"
-SUPPORTED_HELIX_VERSION="0.99.117"
+PACKAGE_VERSION="v0.99.118-tr.1"
+SUPPORTED_HELIX_VERSION="0.99.118"
 FULL_NAME="helixscreen-k2.zip"
-FULL_SHA256="d2fe1daecbebbcb98fd705921a12095796cfb941f350cdf98a3ced0c750c9823"
+FULL_SHA256="1b39a6992648a3eae8e519bbdbb327f9ea2c0da38833478e4f0ab288e96990d1"
 FULL_URL="https://github.com/${REPOSITORY}/releases/download/${PACKAGE_VERSION}/${FULL_NAME}"
 OVERLAY_NAME="helixscreen-k2-tr-overlay.zip"
-OVERLAY_SHA256="384029a493be082d6265c82f5a77ce6e40da78b157b259850c80836adcfef2e3"
+OVERLAY_SHA256="f223e4de63b5568fcf60c90bc97fe2f3d4b45ff247918204820968b4d1f5eac7"
 OVERLAY_URL="https://github.com/${REPOSITORY}/releases/download/${PACKAGE_VERSION}/${OVERLAY_NAME}"
-BINARY_SHA256="141405d9580e68a660a038ec07e4a81d130b28b869f3fef19347b6bf7122e2d6"
+BINARY_SHA256="283c3f81720b24a53ff16485f3f1f2a44e054f047b88f8658fddd131145db269"
 WORK_ROOT="/mnt/UDISK/helixscreen-turkish-installer"
 
 ASSUME_YES=false
@@ -295,7 +295,7 @@ except PermissionError:
 os.replace(temporary, target)
 marker = {
     "repository": "QUINRY/helixscreen-k2-pro-turkce",
-    "version": "v0.99.117-tr.1",
+    "version": "v0.99.118-tr.1",
     "language": "tr",
     "mode": "fresh",
     "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

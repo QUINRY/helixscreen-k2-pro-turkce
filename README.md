@@ -20,12 +20,12 @@
 Bu çalışma, [HelixScreen](https://github.com/prestonbrown/helixscreen) projesinin Creality K2 Pro için hazırlanmış topluluk sürümüdür. Türkçe, ekranın dil menüsünden seçilebilir; CFS işlevleri korunur. Kurucu yazıcının durumunu denetler, paketin SHA-256 özetini doğrular ve baskı sırasında çalışmayı reddeder.
 
 > [!IMPORTANT]
-> Yalnızca **Creality K2 Pro** üzerinde ve HelixScreen **0.99.117** tabanı ile test edildi. Kurulum için yazıcıda Root Erişimi ve SSH açık olmalıdır. İşleme başlamadan önce yazıcının boşta olduğundan emin olun.
+> Yalnızca **Creality K2 Pro** üzerinde ve HelixScreen **0.99.118** tabanı ile test edildi. Kurulum için yazıcıda Root Erişimi ve SSH açık olmalıdır. İşleme başlamadan önce yazıcının boşta olduğundan emin olun.
 
 ## Özellikler
 
 - Arayüzde seçilebilir **Türkçe** dili
-- 2.851 çevrilmiş metin ve UTF-8 Türkçe karakter desteği
+- 2.855 çevrilmiş metin ve UTF-8 Türkçe karakter desteği
 - Creality CFS ekranları ve çoklu filament iş akışları
 - Mevcut uyumlu HelixScreen kurulumunda ayarları koruyan, geri alınabilir Türkçe katman
 - HelixScreen kurulu değilse otomatik tam kurulum
@@ -55,7 +55,7 @@ Kurucu otomatik olarak doğru yolu seçer:
 
 | Yazıcının mevcut durumu | Yapılan işlem | Kaldırıldığında |
 | --- | --- | --- |
-| HelixScreen 0.99.117 kurulu | Yalnız Türkçe katman uygulanır; ekran ve CFS ayarları korunur | Önceki HelixScreen geri gelir |
+| HelixScreen 0.99.118 kurulu | Yalnız Türkçe katman uygulanır; ekran ve CFS ayarları korunur | Önceki HelixScreen geri gelir |
 | HelixScreen kurulu değil | Türkçe tam K2 paketi kurulur | Stok Creality arayüzü geri gelir |
 
 ### Ön kontrol
@@ -69,7 +69,7 @@ curl -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/ma
 
 ### Güncelleme
 
-Yeni bir sürüm çıktığında hızlı kurulum komutunu yeniden çalıştırmanız yeterlidir. Uyumlu olmayan bir HelixScreen sürümü algılanırsa kurucu dosyalara dokunmadan durur.
+Resmî HelixScreen güncellemesi Türkçe dosyaları kaldırırsa, bu projenin yeni uyumlu sürümü yayınlandıktan sonra hızlı kurulum komutunu yeniden çalıştırmanız yeterlidir. Kurucu güncel resmî sürüm için yeni bir geri dönüş yedeği oluşturur; eski sürümün yedeğini yanlışlıkla kullanmaz. Uyumlu olmayan bir HelixScreen sürümü algılanırsa dosyalara dokunmadan durur.
 
 ## Kaldırma
 
@@ -93,7 +93,7 @@ Kaldırmadan önce yalnız kontrol yapmak için son parametreyi `--check` olarak
 
 [Son sürüm](https://github.com/QUINRY/helixscreen-k2-pro-turkce/releases/latest) sayfasından uygun paketi indirin:
 
-- Mevcut HelixScreen 0.99.117 için: `helixscreen-k2-tr-overlay.zip`
+- Mevcut HelixScreen 0.99.118 için: `helixscreen-k2-tr-overlay.zip`
 - HelixScreen kurulu olmayan K2 Pro için: `helixscreen-k2.zip`
 
 Paketi yazıcıya kopyalayın ve kurucuyu yerel dosyayla çalıştırın:
@@ -136,19 +136,19 @@ curl -fsSL https://raw.githubusercontent.com/QUINRY/helixscreen-k2-pro-turkce/ma
 
 - `Permission denied`: K2 Pro'da Root Erişimi'ni tekrar açın ve ekranda gösterilen güncel parolayı kullanın.
 - `Yazıcı şu anda printing/paused`: Baskının bitmesini veya güvenli biçimde iptal edilmesini bekleyin.
-- `Mevcut HelixScreen sürümü uyumlu değil`: Bu sürüm yalnız 0.99.117 tabanını destekler; dosyalar değiştirilmez.
+- `Mevcut HelixScreen sürümü uyumlu değil`: Bu sürüm yalnız 0.99.118 tabanını destekler; dosyalar değiştirilmez.
 - Arayüz açılmıyorsa yazıcıyı yeniden başlatın. Sorun sürerse kaldırma komutu önceki arayüzü geri yükler.
 
 Bir hata bildirirken komut çıktısını, K2 Pro yazılım sürümünü ve HelixScreen sürümünü paylaşın; SSH parolanızı paylaşmayın.
 
 ## Paket doğrulama
 
-`v0.99.117-tr.1` sürümünün SHA-256 değerleri:
+`v0.99.118-tr.1` sürümünün SHA-256 değerleri:
 
 | Dosya | SHA-256 |
 | --- | --- |
-| `helixscreen-k2-tr-overlay.zip` | `384029a493be082d6265c82f5a77ce6e40da78b157b259850c80836adcfef2e3` |
-| `helixscreen-k2.zip` | `d2fe1daecbebbcb98fd705921a12095796cfb941f350cdf98a3ced0c750c9823` |
+| `helixscreen-k2-tr-overlay.zip` | `f223e4de63b5568fcf60c90bc97fe2f3d4b45ff247918204820968b4d1f5eac7` |
+| `helixscreen-k2.zip` | `1b39a6992648a3eae8e519bbdbb327f9ea2c0da38833478e4f0ab288e96990d1` |
 
 Aynı özetler sürüm varlıklarındaki `SHA256SUMS` dosyasında da bulunur ve kurucu tarafından otomatik denetlenir.
 

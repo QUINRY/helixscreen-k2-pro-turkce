@@ -38,9 +38,10 @@ EXECUTABLES = {
 }
 
 EXPECTED_BINARY_SHA256 = (
-    "141405d9580e68a660a038ec07e4a81d130b28b869f3fef19347b6bf7122e2d6"
+    "283c3f81720b24a53ff16485f3f1f2a44e054f047b88f8658fddd131145db269"
 )
-EXPECTED_TRANSLATION_COUNT = 2851
+EXPECTED_UPSTREAM_VERSION = "v0.99.118"
+EXPECTED_TRANSLATION_COUNT = 2855
 
 
 def sha256(data: bytes) -> str:
@@ -64,7 +65,7 @@ def replacement_info(name: str, template: zipfile.ZipInfo | None) -> zipfile.Zip
         info.external_attr = template.external_attr
         info.extra = template.extra
     else:
-        info = zipfile.ZipInfo(name, (2026, 8, 29, 0, 0, 0))
+        info = zipfile.ZipInfo(name, (2026, 8, 30, 0, 0, 0))
         info.create_system = 3
 
     mode = 0o755 if name in EXECUTABLES else 0o644
@@ -112,6 +113,20 @@ def build(source_zip: Path, staging: Path, output_zip: Path) -> dict[str, object
     with zipfile.ZipFile(source_zip, "r") as source:
         if source.testzip() is not None:
             raise SystemExit("The official source ZIP failed its CRC check")
+
+        try:
+            source_release = json.loads(source.read("release_info.json").decode("utf-8"))
+        except (KeyError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise SystemExit("The official source ZIP has invalid release metadata") from error
+        if (
+            source_release.get("project_owner") != "prestonbrown"
+            or source_release.get("version") != EXPECTED_UPSTREAM_VERSION
+            or source_release.get("asset_name") != "helixscreen-k2.zip"
+        ):
+            raise SystemExit(
+                "The source ZIP is not the expected official "
+                f"HelixScreen {EXPECTED_UPSTREAM_VERSION} K2 package"
+            )
 
         infos = source.infolist()
         names = [info.filename for info in infos]
