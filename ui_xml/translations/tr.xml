@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <translations languages="tr">
   <translation tag=" (timed out)" tr=" (zaman aşımına uğradı)"/>
-  <translation tag=" elapsed · " tr=" geçen · "/>
   <translation tag=" frames" tr=" kare"/>
   <translation tag=" left" tr=" kaldı"/>
   <translation tag="&quot;%s&quot; failed to load" tr="&quot;%s&quot; yüklenemedi"/>
@@ -196,6 +195,8 @@
   <translation tag="Apply Changes" tr="Değişiklikleri Uygula"/>
   <translation tag="Applying Changes" tr="Değişiklikler Uygulanıyor"/>
   <translation tag="Applying..." tr="Uygulanıyor..."/>
+  <translation tag="Archive" tr="Arşivle"/>
+  <translation tag="Archive Spool?" tr="Makara arşivlensin mi?"/>
   <translation tag="Are you sure you want to cancel this print? All progress will be lost." tr="Bu yazdırmayı iptal etmek istediğinizden emin misiniz? Tüm ilerlemeler kaybolacak."/>
   <translation tag="Are you sure? This will power off or restart this device." tr="Emin misin? Bu, bu cihazı kapatacak veya yeniden başlatacaktır."/>
   <translation tag="Assign Klipper macros to control LEDs via on/off, toggle, or presets" tr="Açma/kapama, geçiş veya ön ayarlar aracılığıyla LED&apos;leri kontrol etmek için Klipper makrolar atayın"/>
@@ -213,6 +214,7 @@
   <translation tag="Auto-lock" tr="Otomatik kilitleme"/>
   <translation tag="Auto-poll for weight updates" tr="Ağırlık güncellemelerini otomatik sorgula"/>
   <translation tag="Auto-probe or manually check screw heights" tr="Vida yüksekliklerini otomatik olarak problayın veya manuel olarak kontrol edin"/>
+  <translation tag="Auto-refill is on but no two lanes hold matching filament, so nothing will switch on runout" tr="Otomatik doldurma açık ancak eşleşen filament taşıyan iki kanal yok; bu nedenle filament bittiğinde otomatik geçiş yapılmayacak"/>
   <translation tag="Auto-render video" tr="Videoyu otomatik oluştur"/>
   <translation tag="Auto-tuning Shapers..." tr="Otomatik Ayarlama Şekillendiriciler..."/>
   <translation tag="Auto-uninstall only works on local Moonraker" tr="Otomatik kaldırma yalnızca yerel Moonraker cihazlarda çalışır"/>
@@ -858,6 +860,7 @@
   <translation tag="Failed to analyze PRINT_START macro" tr="PRINT_START makrosu analiz edilemedi"/>
   <translation tag="Failed to apply limits" tr="Sınırlar uygulanamadı"/>
   <translation tag="Failed to apply settings" tr="Ayarlar uygulanamadı"/>
+  <translation tag="Failed to archive spool" tr="Makara arşivlenemedi"/>
   <translation tag="Failed to build raster data" tr="Raster verileri oluşturulamadı"/>
   <translation tag="Failed to cancel: {}" tr="İptal edilemedi: {}"/>
   <translation tag="Failed to clear print state: {}" tr="Yazdırma durumu temizlenemedi: {}"/>
@@ -1224,6 +1227,7 @@
   <translation tag="Invalid sheet template index: {} (have {})" tr="Geçersiz sayfa şablonu dizini: {} ({} var)"/>
   <translation tag="Invalid status response from printer" tr="Yazıcıdan geçersiz durum yanıtı"/>
   <translation tag="Issue description" tr="Sorun açıklaması"/>
+  <translation tag="It can be un-archived in Spoolman&apos;s web UI." tr="Spoolman web arayüzünden arşivden çıkarılabilir."/>
   <translation tag="It&apos;s a new spool" tr="Bu yeni bir makara"/>
   <translation tag="Jammed at the Toolhead" tr="Baskı Kafasında Sıkıştı"/>
   <translation tag="Job Queue" tr="İş Kuyruğu"/>
@@ -1349,7 +1353,6 @@
   <translation tag="MACRO DEVICES" tr="MAKRO CİHAZLAR"/>
   <translation tag="MAIN POWER BUTTON" tr="ANA GÜÇ DÜĞMESİ"/>
   <translation tag="MANUAL" tr="MANUEL"/>
-  <translation tag="MAPPING" tr="HARİTALAMA"/>
   <translation tag="MB RAM" tr="MB RAM"/>
   <translation tag="MCU" tr="MCU"/>
   <translation tag="MCU, host, and auxiliary temperature monitoring" tr="MCU, ana bilgisayar ve yardımcı sıcaklık izleme"/>
@@ -2303,6 +2306,7 @@
   <translation tag="Spool #{}" tr="Makara #{}"/>
   <translation tag="Spool Info" tr="Makara Bilgisi"/>
   <translation tag="Spool Weight (g)" tr="Makara Ağırlığı (g)"/>
+  <translation tag="Spool archived" tr="Makara arşivlendi"/>
   <translation tag="Spool created successfully" tr="Makara başarıyla oluşturuldu"/>
   <translation tag="Spool deleted" tr="Makara silindi"/>
   <translation tag="Spool motor" tr="Makara motoru"/>

@@ -117,7 +117,6 @@ fi
 
 echo ""
 
-
 # Every staged path, including deletions - a removed .cpp can invalidate a doc
 # that cites it, so the doc gate has to see D as well as ACMR.
 QC_STAGED_ALL=""
@@ -132,7 +131,6 @@ fi
 VENV_PYTHON=".venv/bin/python"
 TRANS_FMT_PY="${VENV_PYTHON:-python3}"
 [ -x "$TRANS_FMT_PY" ] || TRANS_FMT_PY=python3
-
 
 # ====================================================================
 # Phase 1: Critical Checks
@@ -741,7 +739,7 @@ if [ -f "scripts/check_hardcoded_pixels.py" ]; then
     PIXELS_ARGS=""
   fi
   # shellcheck disable=SC2086
-  if python3 scripts/check_hardcoded_pixels.py --max-allowed 155 --summary $PIXELS_ARGS \
+  if python3 scripts/check_hardcoded_pixels.py --max-allowed 154 --summary $PIXELS_ARGS \
       >/tmp/hardcoded_pixels.out 2>&1; then
     tail -1 /tmp/hardcoded_pixels.out
   else
@@ -1263,6 +1261,26 @@ if [ "$STAGED_ONLY" = true ]; then
       EXIT_CODE=1
     fi
   fi
+
+  # Say what was actually verified. The build above compiles the WORKING TREE,
+  # which in --staged-only mode is not necessarily what is being committed: a
+  # rename touching five files and staged for four builds clean here and breaks
+  # in CI, because the fifth file is on disk but not in the commit. pre-push
+  # gates the real thing (it sweeps an isolated checkout of the pushed commit),
+  # so this is a warning rather than a failure - but an unqualified
+  # "Build successful" over unverified content is how the wrong thing gets
+  # trusted.
+  if [ "$STAGED_ONLY" = true ]; then
+    UNSTAGED_SRC="$(git diff --name-only --diff-filter=ACM -- \
+      '*.cpp' '*.cc' '*.c' '*.h' '*.hpp' '*.mm' 2>/dev/null || true)"
+    if [ -n "$UNSTAGED_SRC" ]; then
+      echo "⚠️  Build verified the WORKING TREE, not the staged commit"
+      echo "   These source files are modified but NOT staged:"
+      echo "$UNSTAGED_SRC" | sed 's/^/     /'
+      echo "   If the commit depends on them it will fail in CI. pre-push checks"
+      echo "   the pushed commit in isolation and will catch it before it leaves."
+    fi
+  fi
   echo ""
 fi
 
@@ -1580,7 +1598,7 @@ if [ -f "scripts/check_imperative_ui.py" ]; then
   # as deliberate pragmatism (the XML engine couldn't express it at the time), some
   # are plain mistakes — both are debt. The number may go DOWN (port a site, then
   # lower this baseline) but must never go up.
-  if python3 scripts/check_imperative_ui.py --max-allowed 379 --summary >/tmp/imperative_ui.out 2>&1; then
+  if python3 scripts/check_imperative_ui.py --max-allowed 367 --summary >/tmp/imperative_ui.out 2>&1; then
     section_time $SECTION_START
     echo ""
     tail -1 /tmp/imperative_ui.out
@@ -1721,6 +1739,73 @@ else
   section_time $SECTION_START
   echo ""
   echo "⚠️  check_timer_destructor_cancel.py not found — skipping"
+fi
+
+echo ""
+
+SECTION_START=$(date +%s)
+echo -n "🪟 Checking X11 macro collisions..."
+
+if [ -f "scripts/check_x11_macro_collisions.py" ]; then
+  # X11's <X.h> defines None, Success, Above and friends as bare macros. SDL's
+  # Linux headers reach X.h through GL, so an identifier sharing one of those
+  # names preprocesses into a numeric constant in any TU that reaches SDL - and
+  # only there. Our own SDL is built without X11, so no local build reproduces
+  # it; for v0.99.118 it surfaced only after the tag was cut, on the x86_64
+  # Debian and Raspberry Pi jobs (InvalidationScope::None, fixed in 3ec0c17be).
+  # Annotate a deliberate one `// X11_MACRO_OK: <reason>`.
+  if python3 scripts/check_x11_macro_collisions.py --max-allowed 0 >/tmp/x11_macros.out 2>&1; then
+    section_time $SECTION_START
+    echo ""
+    tail -1 /tmp/x11_macros.out
+  else
+    section_time $SECTION_START
+    echo ""
+    cat /tmp/x11_macros.out
+    echo "   Rename the identifier; X11's macro always wins."
+    EXIT_CODE=1
+  fi
+else
+  section_time $SECTION_START
+  echo ""
+  echo "⚠️  check_x11_macro_collisions.py not found — skipping"
+fi
+
+echo ""
+
+SECTION_START=$(date +%s)
+echo -n "🐉 Checking clang/GCC divergence..."
+
+# Deliberately NOT in --staged-only: this is seconds per TU, and a changed header
+# fans out to every TU that includes it (json_utils.h reaches 29), which is too
+# slow to sit on every commit. pre-push runs this file in full mode inside an
+# isolated checkout of the pushed commit, so the class is still caught before
+# anything leaves the machine - just not on each commit.
+#
+# The class: CI's Ubuntu job compiles with clang and -Werror while every build
+# here uses g++. v0.99.118 shipped a red build because GCC accepts a comparison
+# clang rejects (-Wtautological-type-limit-compare in json_utils.h, fixed in
+# 5d3ea331c). Nothing local could see it.
+if [ "$STAGED_ONLY" = false ] && [ -f "scripts/check_clang_diagnostics.py" ]; then
+  if python3 scripts/check_clang_diagnostics.py >/tmp/clang_diag.out 2>&1; then
+    section_time $SECTION_START
+    echo ""
+    tail -1 /tmp/clang_diag.out
+  else
+    section_time $SECTION_START
+    echo ""
+    cat /tmp/clang_diag.out
+    echo "   These are errors on CI's Ubuntu job even though g++ accepts them."
+    EXIT_CODE=1
+  fi
+elif [ "$STAGED_ONLY" = true ]; then
+  section_time $SECTION_START
+  echo ""
+  echo "⏭️  clang divergence: skipped in pre-commit (runs on push and in CI)"
+else
+  section_time $SECTION_START
+  echo ""
+  echo "⚠️  check_clang_diagnostics.py not found — skipping"
 fi
 
 echo ""
