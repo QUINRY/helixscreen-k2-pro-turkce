@@ -104,6 +104,22 @@ except Exception:
 PY
 )
 if [ "$MARKER_MODE" = overlay ]; then
+    # An upstream/full update can retain the old overlay marker and manager.
+    # Never put old binary/XML files back over a different base installation.
+    if ! "$PYTHON_BIN" - <<'PY'
+import json
+with open('/opt/helixscreen/config/quinry-turkish-package.json', encoding='utf-8') as handle:
+    marker = json.load(handle)
+with open('/opt/helixscreen/release_info.json', encoding='utf-8') as handle:
+    release = json.load(handle)
+if (release.get('project_owner') != 'QUINRY'
+        or not marker.get('version')
+        or release.get('version') != marker.get('version')):
+    raise SystemExit(1)
+PY
+    then
+        die "HelixScreen tabanı değişmiş; eski Türkçe yedeği geri yüklenmedi. Güncel tabana uygun Türkçe kurucuyu kullanın."
+    fi
     [ -f /opt/helixscreen/config/quinry-turkish-manager.py ] || \
         die "Türkçe katman yöneticisi eksik; güvenli geri yükleme yapılamadı"
     REMOVE_MODE=overlay

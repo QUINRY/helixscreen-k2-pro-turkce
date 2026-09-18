@@ -22,8 +22,8 @@ import time
 import zipfile
 
 
-PACKAGE_VERSION = "v0.99.118-tr.1"
-HELIXSCREEN_VERSION = "0.99.118"
+PACKAGE_VERSION = "v1.0.0-tr.1"
+HELIXSCREEN_VERSION = "1.0.0"
 INSTALL_ROOT = "/opt/helixscreen"
 SETTINGS_PATH = INSTALL_ROOT + "/config/settings.json"
 RELEASE_INFO_PATH = INSTALL_ROOT + "/release_info.json"
@@ -352,6 +352,16 @@ def settings_with_turkish():
 def install_overlay(archive_path, work_dir):
     if not os.path.isfile(SETTINGS_PATH):
         raise RuntimeError("Existing HelixScreen settings.json was not found")
+    release = read_json(RELEASE_INFO_PATH)
+    supported = (
+        release.get("project_owner") == "prestonbrown"
+        and release.get("version") in (HELIXSCREEN_VERSION, "v" + HELIXSCREEN_VERSION)
+    ) or (
+        release.get("project_owner") == "QUINRY"
+        and release.get("version") == PACKAGE_VERSION
+    )
+    if not supported:
+        raise RuntimeError("Overlay requires HelixScreen " + HELIXSCREEN_VERSION)
     manifest, payloads, manager_data = load_overlay(archive_path)
     backup_dir = create_original_backup()
     transaction = os.path.join(work_dir, "transaction")
@@ -400,6 +410,11 @@ def remove_overlay():
     marker = read_json(MARKER_PATH)
     if marker.get("mode") != "overlay":
         raise RuntimeError("Installed package is not an overlay installation")
+    release = read_json(RELEASE_INFO_PATH)
+    if (marker.get("version") != PACKAGE_VERSION
+            or release.get("project_owner") != "QUINRY"
+            or release.get("version") != PACKAGE_VERSION):
+        raise RuntimeError("HelixScreen changed since overlay installation; refusing stale rollback")
     backup_dir = marker.get("backup_dir", "")
     if not safe_backup_dir(backup_dir) or not os.path.isdir(backup_dir):
         raise RuntimeError("The original HelixScreen backup is missing or unsafe")

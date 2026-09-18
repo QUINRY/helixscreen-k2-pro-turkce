@@ -12,11 +12,11 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 
-PACKAGE_VERSION = "v0.99.118-tr.1"
-HELIXSCREEN_VERSION = "0.99.118"
-EXPECTED_TRANSLATION_COUNT = 2855
+PACKAGE_VERSION = "v1.0.0-tr.1"
+HELIXSCREEN_VERSION = "1.0.0"
+EXPECTED_TRANSLATION_COUNT = 2868
 EXPECTED_BINARY_SHA256 = (
-    "283c3f81720b24a53ff16485f3f1f2a44e054f047b88f8658fddd131145db269"
+    "38af1857919f9b4baa1bff1a96c677282b79a6d845599f31d169709d1e7b6054"
 )
 
 
@@ -27,7 +27,7 @@ def sha256(data: bytes) -> str:
 def add_file(
     archive: zipfile.ZipFile, name: str, data: bytes, mode: int = 0o644
 ) -> None:
-    info = zipfile.ZipInfo(name, (2026, 8, 30, 0, 0, 0))
+    info = zipfile.ZipInfo(name, (2026, 9, 18, 0, 0, 0))
     info.create_system = 3
     info.compress_type = zipfile.ZIP_DEFLATED
     info.external_attr = (stat.S_IFREG | mode) << 16

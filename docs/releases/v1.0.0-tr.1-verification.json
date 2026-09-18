@@ -1,0 +1,70 @@
+{
+  "metadata": {
+    "name": "HelixScreen Türkçe K2 Pro",
+    "package_version": "v1.0.0-tr.1",
+    "helixscreen_version": "1.0.0",
+    "platform": "k2",
+    "language": "tr",
+    "translation_entries": 2868,
+    "binary_sha256": "38af1857919f9b4baa1bff1a96c677282b79a6d845599f31d169709d1e7b6054",
+    "source_zip_sha256": "816d67f3f9a98e4bb3186743f7f46d2bf5982737ea8cad4a674e4b79a1d92452",
+    "build_run": "https://github.com/QUINRY/helixscreen-k2-pro-turkce/actions/runs/35379223498",
+    "compiled_source_commit": "adf5a324b3c593682d39f29aabded7c699f26b53",
+    "upstream_tag_commit": "f72e2e51568b144b68cae5f1d1f1eb39bc4ce600",
+    "turkish_xml_sha256": "4053369360b422c2381b25cd9bb848dafdb9b3b9792168f10dfb6d5bdbe0e437",
+    "physical_device_tested": false,
+    "license": "GPL-3.0-or-later"
+  },
+  "full_package": {
+    "bytes": 64934222,
+    "sha256": "5dd10fbadf7eff5b704619416d2f9488f6380f853cff909d2ecf7bb7464c2fb6",
+    "translation_entries": 2868,
+    "binary_sha256": "38af1857919f9b4baa1bff1a96c677282b79a6d845599f31d169709d1e7b6054"
+  },
+  "overlay": {
+    "bytes": 10038676,
+    "sha256": "a8fe5cc3efbb34fa652b4f573cb60c2483dd5c3515d6956745fb5421ed4f3997",
+    "translation_entries": 2868,
+    "binary_sha256": "38af1857919f9b4baa1bff1a96c677282b79a6d845599f31d169709d1e7b6054"
+  },
+  "upstream_files_changed": [
+    "bin/helix-screen",
+    "config/settings.json",
+    "release_info.json",
+    "ui_xml/translations/translations.xml",
+    "ui_xml/wizard_language_chooser.xml"
+  ],
+  "upstream_files_added": [
+    "TURKISH_PACKAGE.json",
+    "assets/images/flags/flag_tr.bin",
+    "assets/images/flags/flag_tr.png",
+    "ui_xml/translations/tr.xml"
+  ],
+  "other_upstream_files_byte_identical": true,
+  "original_nine_locales_preserved": true,
+  "arm32_static_binary": true,
+  "physical_device_tested": false,
+  "local_tests": {
+    "command": "python -X utf8 -m pytest tests/python/test_k2_turkish_catalogue.py tests/python/test_k2_turkish_overlay.py tests/python/test_generate_translations.py tests/python/test_translation_sync.py -q",
+    "passed": 134,
+    "failed": 0
+  },
+  "mutation_checks": [
+    {
+      "mutation": "rollback_noop",
+      "test": "test_start_failure_restores_previous_files",
+      "detected": true
+    },
+    {
+      "mutation": "version_guard_removed",
+      "test": "test_direct_overlay_rejects_mismatched_base",
+      "detected": true
+    },
+    {
+      "mutation": "stale_rollback_guard_removed",
+      "test": "test_remove_refuses_stale_backup_after_upstream_update",
+      "detected": true
+    }
+  ],
+  "printer_accessed": false
+}

@@ -10,15 +10,15 @@ set -eu
 export PATH="/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 REPOSITORY="QUINRY/helixscreen-k2-pro-turkce"
-PACKAGE_VERSION="v0.99.118-tr.1"
-SUPPORTED_HELIX_VERSION="0.99.118"
+PACKAGE_VERSION="v1.0.0-tr.1"
+SUPPORTED_HELIX_VERSION="1.0.0"
 FULL_NAME="helixscreen-k2.zip"
-FULL_SHA256="1b39a6992648a3eae8e519bbdbb327f9ea2c0da38833478e4f0ab288e96990d1"
+FULL_SHA256="5dd10fbadf7eff5b704619416d2f9488f6380f853cff909d2ecf7bb7464c2fb6"
 FULL_URL="https://github.com/${REPOSITORY}/releases/download/${PACKAGE_VERSION}/${FULL_NAME}"
 OVERLAY_NAME="helixscreen-k2-tr-overlay.zip"
-OVERLAY_SHA256="f223e4de63b5568fcf60c90bc97fe2f3d4b45ff247918204820968b4d1f5eac7"
+OVERLAY_SHA256="a8fe5cc3efbb34fa652b4f573cb60c2483dd5c3515d6956745fb5421ed4f3997"
 OVERLAY_URL="https://github.com/${REPOSITORY}/releases/download/${PACKAGE_VERSION}/${OVERLAY_NAME}"
-BINARY_SHA256="283c3f81720b24a53ff16485f3f1f2a44e054f047b88f8658fddd131145db269"
+BINARY_SHA256="38af1857919f9b4baa1bff1a96c677282b79a6d845599f31d169709d1e7b6054"
 WORK_ROOT="/mnt/UDISK/helixscreen-turkish-installer"
 
 ASSUME_YES=false
@@ -142,7 +142,7 @@ PY
         INSTALLED_VERSION=$(/opt/helixscreen/bin/helix-screen --version 2>/dev/null | head -n 1 || true)
     fi
     case "$INSTALLED_VERSION" in
-        *"$SUPPORTED_HELIX_VERSION"*) ;;
+        "$SUPPORTED_HELIX_VERSION"|"v$SUPPORTED_HELIX_VERSION"|"$PACKAGE_VERSION") ;;
         *) die "Mevcut HelixScreen sürümü uyumlu değil: ${INSTALLED_VERSION:-bilinmiyor}. Desteklenen: ${SUPPORTED_HELIX_VERSION}" ;;
     esac
 fi
@@ -295,7 +295,7 @@ except PermissionError:
 os.replace(temporary, target)
 marker = {
     "repository": "QUINRY/helixscreen-k2-pro-turkce",
-    "version": "v0.99.118-tr.1",
+    "version": "v1.0.0-tr.1",
     "language": "tr",
     "mode": "fresh",
     "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

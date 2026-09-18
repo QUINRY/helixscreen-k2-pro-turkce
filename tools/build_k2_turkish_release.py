@@ -38,10 +38,10 @@ EXECUTABLES = {
 }
 
 EXPECTED_BINARY_SHA256 = (
-    "283c3f81720b24a53ff16485f3f1f2a44e054f047b88f8658fddd131145db269"
+    "38af1857919f9b4baa1bff1a96c677282b79a6d845599f31d169709d1e7b6054"
 )
-EXPECTED_UPSTREAM_VERSION = "v0.99.118"
-EXPECTED_TRANSLATION_COUNT = 2855
+EXPECTED_UPSTREAM_VERSION = "v1.0.0"
+EXPECTED_TRANSLATION_COUNT = 2868
 
 
 def sha256(data: bytes) -> str:
@@ -65,7 +65,7 @@ def replacement_info(name: str, template: zipfile.ZipInfo | None) -> zipfile.Zip
         info.external_attr = template.external_attr
         info.extra = template.extra
     else:
-        info = zipfile.ZipInfo(name, (2026, 8, 30, 0, 0, 0))
+        info = zipfile.ZipInfo(name, (2026, 9, 18, 0, 0, 0))
         info.create_system = 3
 
     mode = 0o755 if name in EXECUTABLES else 0o644
