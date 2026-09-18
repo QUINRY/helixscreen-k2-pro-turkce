@@ -49,6 +49,8 @@
 
 #include <algorithm>
 #include <chrono>
+#include <memory>
+#include <string>
 #include <string_view>
 #include <unordered_set>
 
@@ -321,6 +323,7 @@ void PrintStatusWidget::attach(lv_obj_t* widget_obj, lv_obj_t* parent_screen) {
                 self->check_and_show_idle_runout_modal();
             } else {
                 self->runout_modal_shown_ = false;
+                self->saw_filament_present_ = true;
             }
         });
 
@@ -779,8 +782,7 @@ void PrintStatusWidget::on_print_thumbnail_path_changed(const char* path) {
     // No empty-path branch: ActivePrintMediaManager is the subject's sole writer
     // and publishes no_thumbnail_placeholder() — the very image this used to
     // substitute — when a file has no thumbnail, so the value is always an image.
-    lv_image_set_src(print_card_active_thumb_, path);
-    spdlog::info("[PrintStatusWidget] Active print thumbnail updated: {}", path);
+    defer_apply_active_thumbnail(path);
 }
 
 #if defined(HELIX_PLATFORM_ESP32)
@@ -873,6 +875,50 @@ void PrintStatusWidget::defer_reset_print_card_to_idle() {
             }
         },
         this);
+}
+
+void PrintStatusWidget::defer_apply_active_thumbnail(const char* path) {
+    // Heap-allocate the payload so lv_async_call can carry it as void*, and copy
+    // the path: the subject may publish again before the tick, and the pointer it
+    // handed us is its own buffer. The LifetimeToken (not a live_instances()
+    // lookup) is what keeps this safe - detach() invalidates it, so a pending
+    // write cannot land on a widget that has already let go of its objects.
+    struct PendingThumb {
+        helix::LifetimeToken token;
+        PrintStatusWidget* self;
+        std::string path;
+    };
+    auto* pending = new PendingThumb{lifetime_.token(), this, path ? path : ""};
+
+    // Raw lv_async_call escapes the UpdateQueue::process_pending() batch this
+    // observer body runs in, the same escape defer_reset_print_card_to_idle()
+    // makes for the idle sibling.
+    lv_async_call(
+        [](void* ud) {
+            std::unique_ptr<PendingThumb> p(static_cast<PendingThumb*>(ud));
+            if (p->token.expired())
+                return;
+            PrintStatusWidget* self = p->self;
+            if (!self->widget_obj_ || !self->print_card_active_thumb_)
+                return;
+
+            // Trigger hardening (#1001), matching reset_print_card_to_idle():
+            // by the time the tick fires, populate_page's safe_clean_children()
+            // may have reparented this subtree onto lv_layer_top() to await
+            // deletion. lv_image_set_src -> update_align -> lv_obj_update_layout
+            // would then walk the whole layer and recurse into sibling condemned
+            // grid subtrees whose children may already be freed -> SIGSEGV in
+            // grid calc().
+            if (!helix::ui::is_on_active_screen(self->print_card_active_thumb_)) {
+                spdlog::debug("[PrintStatusWidget] Skip active thumbnail: off active screen "
+                              "(mid-teardown)");
+                return;
+            }
+
+            lv_image_set_src(self->print_card_active_thumb_, p->path.c_str());
+            spdlog::info("[PrintStatusWidget] Active print thumbnail updated: {}", p->path);
+        },
+        pending);
 }
 
 void PrintStatusWidget::reset_print_card_to_idle() {
@@ -1009,6 +1055,17 @@ void PrintStatusWidget::check_and_show_idle_runout_modal() {
         return;
     }
 
+    // Nothing extrudes while the printer is idle, so filament that leaves the
+    // sensor in this state was pulled out by whoever is standing at the machine.
+    // Announcing it back to them under a warning icon reports a fault that cannot
+    // have happened. An empty sensor found on arrival is the case worth raising:
+    // that operator may not know, and Load is what they need.
+    // (prestonbrown/helixscreen#1497)
+    if (saw_filament_present_) {
+        spdlog::debug("[PrintStatusWidget] Filament left the sensor while idle - no dialog");
+        return;
+    }
+
     // Verify actual sensor state. Use has_real_runout() (not has_any_runout())
     // so a runout sensor on an intentionally-empty / never-loaded AMS lane does
     // NOT raise the idle modal — e.g. a multi-color print using heads 0+2 with
@@ -1111,8 +1168,14 @@ void PrintStatusWidget::show_idle_runout_modal() {
         // Resume not applicable when idle
     });
 
-    runout_modal_.set_on_cancel_print([]() {
-        // Cancel not applicable when idle
+    runout_modal_.set_on_cancel_print([this, token]() {
+        if (token.expired())
+            return;
+        // Cancel is not applicable when idle, and the XML keeps btn_cancel_print
+        // hidden unless print_state_enum == 2. on_tertiary() leaves closing to
+        // the callback, so this one closes: a press here has nothing to confirm
+        // and must still dismiss the dialog.
+        runout_modal_.hide();
     });
 
     runout_modal_.show(parent_screen_);
@@ -2073,7 +2136,6 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
         s_formatter_->nozzle_target_observer_.reset();
         s_formatter_->tools_version_observer_.reset();
         s_formatter_->active_tool_observer_.reset();
-        s_formatter_->arc_value_observer_.reset();
         s_formatter_->nozzle_temp_lifetime_.reset();
         s_formatter_->nozzle_target_lifetime_.reset();
         s_formatter_->subjects_.deinit_all();
@@ -2131,17 +2193,6 @@ PrintStatusWidget::DetailedFormatter::DetailedFormatter() {
     update_multi_tool();
     update_tool_label();
 
-    // Arc value observer — keeps lv_arc value in sync with print progress.
-    // arc_widget_ is nulled by an LV_EVENT_DELETE callback registered in
-    // attach_arc(), so a non-null pointer here is always live (L075: no
-    // lv_obj_is_valid in observer cbs).
-    arc_value_observer_ = observe_int_sync<DetailedFormatter>(
-        ps.get_print_progress_subject(), this, [](DetailedFormatter* self, int pct) {
-            if (self->arc_widget_) {
-                lv_arc_set_value(self->arc_widget_, pct);
-            }
-        });
-
     // Idle hero — populate from print history and refresh on history-changed notifications.
     // PrintHistoryManager fires observers on the main thread (defer-wrapped in on_history_fetched),
     // so direct lv_subject_* writes here are safe; no AsyncLifetimeGuard needed.
@@ -2181,7 +2232,6 @@ PrintStatusWidget::DetailedFormatter::~DetailedFormatter() {
     nozzle_target_observer_.reset();
     tools_version_observer_.reset();
     active_tool_observer_.reset();
-    arc_value_observer_.reset();
     nozzle_temp_lifetime_.reset();
     nozzle_target_lifetime_.reset();
     subjects_.deinit_all();
@@ -2190,19 +2240,17 @@ PrintStatusWidget::DetailedFormatter::~DetailedFormatter() {
 void PrintStatusWidget::DetailedFormatter::attach_arc(lv_obj_t* arc) {
     arc_widget_ = arc;
     if (arc) {
-        // Range + angles + styling come from helix_progress_arc; just seed the
-        // initial value.
-        int pct = lv_subject_get_int(get_printer_state().get_print_progress_subject());
-        lv_arc_set_value(arc, pct);
-        // Null arc_widget_ when LVGL destroys the arc — lets the progress
-        // observer null-check without lv_obj_is_valid (L075). Guard against
-        // the layout-rebuild race: the home panel attaches widget A → detaches A
-        // → attaches B in quick succession; A's deferred LV_EVENT_DELETE fires
-        // AFTER B has already overwritten arc_widget_ with its own arc. An
-        // unconditional null here clobbers B's live arc and leaves the
-        // progress observer with no widget to update — the arc renders the
-        // grey track only, forever. Only clear when the deleted object is
-        // still the one we're tracking.
+        // Range, angles, styling and the value binding all come from the XML
+        // (helix_progress_arc + bind_value="print_progress_display"); this
+        // helper only owns what has no declarative equivalent.
+        //
+        // Null arc_widget_ when LVGL destroys the arc, so resize_arc() cannot
+        // reach a freed object. Guard against the layout-rebuild race: the home
+        // panel attaches widget A → detaches A → attaches B in quick
+        // succession; A's deferred LV_EVENT_DELETE fires AFTER B has already
+        // overwritten arc_widget_ with its own arc. An unconditional null here
+        // clobbers B's live arc and leaves resize_arc() with nothing to fit.
+        // Only clear when the deleted object is still the one we're tracking.
         lv_obj_add_event_cb(
             arc,
             [](lv_event_t* e) {

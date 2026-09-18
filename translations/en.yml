@@ -125,6 +125,7 @@ translations:
   Accelerometer: Accelerometer
   Accelerometer communication failed. Try again.: Accelerometer communication failed.
     Try again.
+  Accelerometers: Accelerometers
   Accept: Accept
   'Accepted Z Position: 0.000': 'Accepted Z Position: 0.000'
   'Accepted Z Position: {:.3f}': 'Accepted Z Position: {:.3f}'
@@ -222,6 +223,7 @@ translations:
   Auto: Auto
   Auto Bed Mesh: Auto Bed Mesh
   Auto Cal: Auto Cal
+  Auto Fans: Auto Fans
   Auto-Detect: Auto-Detect
   Auto-Heat on Load: Auto-Heat on Load
   Auto-detect: Auto-detect
@@ -229,7 +231,7 @@ translations:
   Auto-lock: Auto-lock
   Auto-poll for weight updates: Auto-poll for weight updates
   Auto-probe or manually check screw heights: Auto-probe or manually check screw heights
-  Auto-refill is on but no two lanes hold matching filament, so nothing will switch on runout: Auto-refill is on but no two lanes hold matching filament, so nothing will switch on runout
+  Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout: Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout
   Auto-render video: Auto-render video
   'Auto-tuning Shapers...': 'Auto-tuning Shapers...'
   Auto-uninstall only works on local Moonraker: Auto-uninstall only works on local
@@ -340,8 +342,8 @@ translations:
   Bypass disabled: Bypass disabled
   Bypass enabled: Bypass enabled
   Bypass failed: Bypass failed
-  ? Bypass is active, but this print uses AMS lanes. The printer may refuse to load a lane while bypass filament is in the toolhead. Remove the filament and turn bypass off before printing. Start anyway?
-  : Bypass is active, but this print uses AMS lanes. The printer may refuse to load a lane while bypass filament is in the toolhead. Remove the filament and turn bypass off before printing. Start anyway?
+  ? Bypass is active, but this print uses AMS slots. The printer may refuse to load a slot while bypass filament is in the toolhead. Remove the filament and turn bypass off before printing. Start anyway?
+  : Bypass is active, but this print uses AMS slots. The printer may refuse to load a slot while bypass filament is in the toolhead. Remove the filament and turn bypass off before printing. Start anyway?
   Bypass toggle failed: Bypass toggle failed
   C: C
   CALIBRATION: CALIBRATION
@@ -394,7 +396,6 @@ translations:
     still be running — response timed out
   Calibration saved but cannot apply on SDL display: Calibration saved but cannot
     apply on SDL display
-  Calibration started: Calibration started
   Calibration succeeded, but the frequency chart data couldn't be read.: Calibration succeeded, but the frequency chart data couldn't be read.
   Calibration succeeded. The frequency chart is only available when HelixScreen runs on the printer.: Calibration succeeded. The frequency chart is only available when HelixScreen runs on the printer.
   Calibration timed out. Please try again.: Calibration timed out. Please try again.
@@ -487,6 +488,7 @@ translations:
   Checking...: Checking...
   Choose 12-hour or 24-hour time display: Choose 12-hour or 24-hour time display
   Choose Filament: Choose Filament
+  Choose Model: Choose Model
   Choose an existing filament, or tap + New to create one.: Choose an existing filament,
     or tap + New to create one.
   Choose display language: Choose display language
@@ -530,6 +532,7 @@ translations:
   Collecting debug info...: Collecting debug info...
   Color: Color
   Color Mismatch: Color Mismatch
+  Color Sensors: Color Sensors
   Communication Test: Communication Test
   Compact: Compact
   Comparison: Comparison
@@ -617,6 +620,7 @@ translations:
   Continue: Continue
   Control optional print start features: Control optional print start features
   Control power relays and smart outlets: Control power relays and smart outlets
+  Controllable Fans: Controllable Fans
   Controlled by hardware sensor: Controlled by hardware sensor
   Controller: Controller
   Cool Down: Cool Down
@@ -728,6 +732,7 @@ translations:
   Dev: Dev
   Dev channel requires dev_url in config: Dev channel requires dev_url in config
   Device: Device
+  Device Section: Device Section
   Device connected: Device connected
   Device name: Device name
   Device name is required: Device name is required
@@ -1012,7 +1017,6 @@ translations:
   'Failed to set temperature: {}': 'Failed to set temperature: {}'
   'Failed to set {} temp: {}': 'Failed to set {} temp: {}'
   Failed to show confirmation dialog: Failed to show confirmation dialog
-  Failed to start calibration: Failed to start calibration
   'Failed to start installer: ': 'Failed to start installer: '
   'Failed to start print: {}': 'Failed to start print: {}'
   'Failed to start uninstaller: ': 'Failed to start uninstaller: '
@@ -1256,6 +1260,7 @@ translations:
   Hub & Cutter: Hub & Cutter
   Hub Bowden Length: Hub Bowden Length
   Humidity: Humidity
+  Humidity Sensors: Humidity Sensors
   Hyperlapse: Hyperlapse
   Hyperlapse captures frames at fixed time intervals. Good for very long prints.: Hyperlapse
     captures frames at fixed time intervals. Good for very long prints.
@@ -1400,8 +1405,6 @@ translations:
   Labels Per Sheet: Labels Per Sheet
   Lane: Lane
   Lane tests and motor resets: Lane tests and motor resets
-  Lane {} is blocked — manual intervention required: Lane {} is blocked — manual intervention
-    required
   Language: Language
   Language, theme, brightness, and sound: Language, theme, brightness, and sound
   Last: Last
@@ -1632,6 +1635,7 @@ translations:
   Network forgotten: Network forgotten
   Network name cannot be empty: Network name cannot be empty
   Never: Never
+  New Spool: New Spool
   'New Spool: Step 1 of 3': 'New Spool: Step 1 of 3'
   'New Spool: Step {} of {}': 'New Spool: Step {} of {}'
   New Version Available: New Version Available
@@ -1713,6 +1717,7 @@ translations:
   No slot currently matches.: No slot currently matches.
   No spool assigned: No spool assigned
   No spools found — tap to retry: No spools found — tap to retry
+  No spools match your search: No spools match your search
   No tape detected in printer: No tape detected in printer
   No target printer configured: No target printer configured
   No temperature sensors detected: No temperature sensors detected
@@ -2019,6 +2024,7 @@ translations:
     the expected service — wrong device?
   Printer hardware detected: Printer hardware detected
   Printer image set to auto-detect: Printer image set to auto-detect
+  Printer is busy - {} stays in the queue: Printer is busy - {} stays in the queue
   Printer is not paired — pair it first: Printer is not paired — pair it first
   Printer name: Printer name
   Printer not ready: Printer not ready
@@ -2042,6 +2048,7 @@ translations:
   Probe Accuracy Failed: Probe Accuracy Failed
   Probe Accuracy Test: Probe Accuracy Test
   Probe Management: Probe Management
+  Probe Sensors: Probe Sensors
   Probe Speed: Probe Speed
   Probe controls, accuracy test, and settings: Probe controls, accuracy test, and
     settings
@@ -2158,7 +2165,7 @@ translations:
   Remap Tool: Remap Tool
   Remap needs the HelixPrint plugin: Remap needs the HelixPrint plugin
   Remap…: Remap…
-  Remember lane spool details across an eject: Remember lane spool details across an eject
+  Remember slot spool details across an eject: Remember slot spool details across an eject
   Remove: Remove
   Remove PIN: Remove PIN
   Remove Spoolman?: Remove Spoolman?
@@ -2484,6 +2491,7 @@ translations:
   'Slot %d: %.0fg of %.0fg needed': 'Slot %d: %.0fg of %.0fg needed'
   Slot 1: Slot 1
   Slot {}: Slot {}
+  Slot {} is blocked — manual intervention required: Slot {} is blocked — manual intervention required
   Slot {} matches.: Slot {} matches.
   Slot {} spool cleared: Slot {} spool cleared
   Slot {} updated: Slot {} updated
@@ -2590,11 +2598,13 @@ translations:
   Support, documentation, and version info: Support, documentation, and version info
   Suppress periodic 'T:.../B:...' status lines: Suppress periodic 'T:.../B:...' status
     lines
+  Suppress periodic temperature status lines: Suppress periodic temperature status lines
   Suppress raw debug output from printer firmware modules: Suppress raw debug output
     from printer firmware modules
   Surfaces inherit app background tokens for light and dark modes.: Surfaces inherit
     app background tokens for light and dark modes.
   Switch Printer: Switch Printer
+  Switch Sensors: Switch Sensors
   Switch between light and dark themes: Switch between light and dark themes
   Switch to v%s: Switch to v%s
   Switched to T{}: Switched to T{}
@@ -2707,9 +2717,9 @@ translations:
   The printer's firmware chooses the backup spool itself: The printer's firmware chooses the backup spool itself
   The runout sensor indicates no filament is loaded. Start print anyway?: The runout
     sensor indicates no filament is loaded. Start print anyway?
-  The toolhead has filament but no AMS lane reports it loaded. Pull it out manually before printing. Start anyway?: The toolhead has filament but no AMS lane reports it loaded. Pull it out manually before printing. Start anyway?
-  ? The toolhead has filament but no AMS lane reports it loaded. The printer may refuse to load a lane until it is cleared. Start anyway?
-  : The toolhead has filament but no AMS lane reports it loaded. The printer may refuse to load a lane until it is cleared. Start anyway?
+  The toolhead has filament but no AMS slot reports it loaded. Pull it out manually before printing. Start anyway?: The toolhead has filament but no AMS slot reports it loaded. Pull it out manually before printing. Start anyway?
+  ? The toolhead has filament but no AMS slot reports it loaded. The printer may refuse to load a slot until it is cleared. Start anyway?
+  : The toolhead has filament but no AMS slot reports it loaded. The printer may refuse to load a slot until it is cleared. Start anyway?
   The toolhead sensor indicates filament is already loaded. Proceed with load anyway?: The
     toolhead sensor indicates filament is already loaded. Proceed with load anyway?
   The toolhead sensor indicates no filament is present. Proceed with unload anyway?: The
@@ -2825,7 +2835,7 @@ translations:
   'Tool change failed: {}': 'Tool change failed: {}'
   Tool mapping failed: Tool mapping failed
   Tool swap: Tool swap
-  'Tool {} → Lane {}: no filament loaded.': 'Tool {} → Lane {}: no filament loaded.'
+  'Tool {} → Slot {}: no filament loaded.': 'Tool {} → Slot {}: no filament loaded.'
   Toolhead: Toolhead
   Toolhead LED: Toolhead LED
   Toolhead Style: Toolhead Style
@@ -3020,6 +3030,7 @@ translations:
   Widget Labels: Widget Labels
   Width: Width
   Width Sensor: Width Sensor
+  Width Sensors: Width Sensors
   Wifi: Wifi
   Will not switch spools on runout: Will not switch spools on runout
   Wipe nozzle on silicone cleaning strip: Wipe nozzle on silicone cleaning strip
@@ -3120,6 +3131,7 @@ translations:
   AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle: AFC's remember_spool is retaining spool info in firmware; that takes precedence over this toggle
   AI detection: AI detection
   or type a macro name: or type a macro name
+  printer default: printer default
   prints: prints
   remaining: remaining
   remaining before clog detection triggers: remaining before clog detection triggers
@@ -3165,7 +3177,6 @@ translations:
   '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.': '{} is installed but its backup-spool switching is turned off, so no automatic swap will happen.'
   '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.': '{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap.'
   '{} is not set up on this printer': '{} is not set up on this printer'
-  '{} lanes': '{} lanes'
   '{} macro not configured': '{} macro not configured'
   '{} may cause unintended changes. Are you sure?': '{} may cause unintended changes.
     Are you sure?'
@@ -3175,6 +3186,7 @@ translations:
   '{} preset{}': '{} preset{}'
   '{} set to {}': '{} set to {}'
   '{} set to {} {}': '{} set to {} {}'
+  '{} slots': '{} slots'
   '{} started': '{} started'
   '{} target set to {}°C': '{} target set to {}°C'
   ? '{} will switch to a slot whose filament type AND colour both match the active spool and whose own port sensor reads filament present.'

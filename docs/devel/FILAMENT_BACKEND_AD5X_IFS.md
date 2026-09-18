@@ -1,7 +1,9 @@
 # AD5X IFS (FlashForge Adventurer 5X) Filament Backend
 
 The FlashForge Adventurer 5X 4-lane Intelligent Filament Switching (IFS) system runs on
-a separate STM32 MCU and is supported through ZMOD firmware (v1.7.0+). Topology is
+a separate STM32 MCU and is supported on two firmwares: ZMOD (v1.7.0+) and the
+standalone IFS module extracted from it (ships in Forge-X — see "The standalone IFS
+module" below). Topology is
 `PathTopology::LINEAR` - the four ports merge at a single combiner before the toolhead.
 
 ## AD5X IFS (FlashForge Adventurer 5X)
@@ -19,6 +21,49 @@ The AD5X has a 4-lane Intelligent Filament Switching (IFS) system controlled by 
 IFS is detected via `filament_switch_sensor _ifs_port_sensor_{1-4}` or `filament_motion_sensor _ifs_motion_sensor_{1-4}` in `printer.objects.list`. The leading space in sensor names is intentional — it's a Klipper object naming convention.
 
 Detection is gated by `!has_mmu_` — if Happy Hare or AFC is already detected, IFS sensors are ignored (priority: HH > AFC > IFS).
+
+### The standalone IFS module (Forge-X)
+
+The IFS logic was extracted from zmod into a drop-in module (Python plugins plus
+one gcode file; ships in Forge-X, runs on any klipper host). It speaks a
+first-class Moonraker surface, and the backend switches to it wholesale the
+moment a status frame carries either object (`ifs_module_live_`):
+
+| Source | Data |
+|--------|------|
+| `ifs` object | `connected` / `error` / `activity` (`polling`/`ready`/`clamped`/`loading`/`unclamping`/`unloading`/`driver_error`) / `active_channel` (the F13 chan — same stickiness as zmod's Chan) / `loaded_channels` (silk bitmask decoded; the presence authority) / `pending_insert_channels` / `params` |
+| `ifs_materials` object | `slots` dict — STRING keys, `#RRGGBB`/`#RGB` colours, per-material handling `temp` — a view onto the same Adventurer5M.json `zmod_color` reads, re-read on mtime change and pushed as a diff |
+| `save_variables.ifs_loaded` | The module's own success-confirmed lane-in-nozzle record (written at the end of `IFS_LOAD`/`IFS_UNLOAD`, survives restarts). Stronger than `active_channel`, which also tracks cold ejects — the client just reads it |
+| `filament_switch_sensor toolhead` | The module's ADC-classified toolhead switch, registered under a stock name — the head-presence authority (feeds the same `parse_head_sensor` path as zmod's `head_switch_sensor`) |
+
+`loaded_channels` and `active_channel` are folded into the same
+`ZColorSilentResult` the zmod objects and macro responses use, so every seated-
+channel guard, presence corroboration, and external-edit baseline applies
+unchanged. `ifs_loaded` overwrites `seated_chan_` directly.
+
+**Ops and writes route to the module's macros** once live:
+
+| Action | Command |
+|--------|---------|
+| Load | `IFS_LOAD SLOT={n}` (resolves its own heat from the slot's material; self-unloads the outgoing lane) |
+| Toolhead unload | `IFS_UNLOAD SLOT={n}` (bare for "whatever is active" — it defaults from `ifs_loaded`) |
+| Lane eject | `IFS_EJECT SLOT={n}` (replaces the zmod `IFS_F24`/`F11`/`F39` sequence) |
+| Tool change | `T{n}` — the module maps T0..T3 to slots 1..4 itself, so the identity tool map is firmware truth |
+| Material/colour edit | `IFS_SET_MATERIAL SLOT={n} TYPE=… COLOR=7EC8E3` (bare hex — klipper's parser eats `#`; the module re-prefixes) |
+| Fault recovery / abort | `IFS_RESET_DRIVER` / `IFS_STOP` |
+
+**Both ZMOD polls stand down** on the module (this is the #1344 stand-down,
+shipped here because `ifs_loaded` carries what `FFMInfo.channel` was missing on
+the zmod object path): no `Adventurer5M.json` HTTP poll, no `GET_ZCOLOR` /
+`IFS_STATUS` round trips — neither command exists on that firmware, and
+`ifs_materials` pushes file changes by subscription.
+
+The board's `activity` refines `system_info_.action` for ops HelixScreen did
+NOT start (a slicer's `T1`, a console `IFS_LOAD`): `loading`/`unloading` map
+up from IDLE, `ready` settles an untracked busy op back to IDLE, and
+`driver_error` raises ERROR with the module's own error text. Ops we DID start
+are excluded (`phase_tracker_` gate) — the macro-ack finalize and the tracker
+own those, and a polling `ready` frame must never erase a tracked op's HEATING.
 
 ### State Sources
 
@@ -172,9 +217,9 @@ has no backup-spool switching at all" was wrong; zmod's own user-facing name for
 
 | Mode | Trigger | Enable flag | Default |
 |------|---------|-------------|---------|
-| Stock zMod (`!has_ifs_vars_`) | `head_switch_sensor` runout_gcode calls `ANALOG_PRUTOK` (`ad5x_display_off.cfg:39-44`) | none — always on | on |
+| Stock zMod (`!has_ifs_vars_`) | `head_switch_sensor` runout_gcode calls `ANALOG_PRUTOK` (`ad5x_display_off.cfg`) | none — always on | on |
 | bambufy | `_RUNOUT_HEAD` (plugin overrides the sensor's runout_gcode) | `variable_backup` (`bambufy.cfg:_IFS_VARS`) | **on** (`variable_backup: 1`) |
-| lessWaste | `_RUNOUT_HEAD` (same shape; lessWaste is a fork of bambufy V1.2.10) | `variable_backup` (`lesswaste_src.cfg:969`) | off (`variable_backup: 0`) |
+| lessWaste | `_RUNOUT_HEAD` (same shape; lessWaste is a fork of bambufy V1.2.10) | `variable_backup` (`lesswaste_src.cfg`) | off (`variable_backup: 0`) |
 
 The match rule is identical across all three: same `ffmType` AND same `ffmColor` AND the
 candidate port's presence sensor reads filament. None of the three disables switchover in
@@ -199,14 +244,14 @@ into the backend-neutral `ams_endless_state` / `ams_endless_text` subjects for e
 
 Per `printers/FLASHFORGE_AD5X_SUPPORT.md` § "lessWaste-Specific Variables" and the source
 variable dumps in `printer-research/FLASHFORGE_AD5X_IFS_ANALYSIS.md`, lessWaste ships
-`variable_backup` defaulting **off** (`lesswaste_src.cfg:969`) and bambufy ships it defaulting
+`variable_backup` defaulting **off** (`lesswaste_src.cfg`) and bambufy ships it defaulting
 **on** (`bambufy.cfg:_IFS_VARS`). **Neither has been observed on a device by us** — the
 defaults are source-reads, not device observations. Nothing branches on the value except the
 wording, the runout-warning log, and the longer confirm delay.
 
 **The matching rule the hint text promises is strict and must stay strict**: a backup port qualifies only when its filament **type** and **colour** both equal the active spool's *and* its own port sensor reads filament present (`find_backup_slot_locked()`). This mirrors exactly what `ANALOG_PRUTOK` (zmod_ifs.py:663-667) and `_RUNOUT_HEAD` enforce on the device.
 
-> **PAUSE-reason follow-up, not implemented:** bambufy and lessWaste both emit `PAUSE REASON=` with one of `jam`, `broken`, `runout`, `empty`, `backup`, `loading`, `nobackup` (the last on a backup-enabled runout with no same-type+colour match — bambufy-only; verified from `bambufy.cfg:149`). That is a direct, unambiguous runout signal — but only on the plugin path, which is precisely the case the sensor-based detector above is *not* needed for. Parsing it would let the plugin path skip the dwell entirely.
+> **PAUSE-reason follow-up, not implemented:** bambufy and lessWaste both emit `PAUSE REASON=` with one of `jam`, `broken`, `runout`, `empty`, `backup`, `loading`, `nobackup` (the last on a backup-enabled runout with no same-type+colour match — bambufy-only; verified from `bambufy.cfg`). That is a direct, unambiguous runout signal — but only on the plugin path, which is precisely the case the sensor-based detector above is *not* needed for. Parsing it would let the plugin path skip the dwell entirely.
 
 ### G-code Commands
 

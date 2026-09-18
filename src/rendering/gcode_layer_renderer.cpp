@@ -188,8 +188,26 @@ void GCodeLayerRenderer::set_bottom_occlusion(float occlusion) {
         return;
     }
     bottom_occlusion_ = clamped;
+    // THUMBNAIL_PARITY derives neither scale nor shift from the occlusion, so
+    // a moving occluder must not wipe the caches for a fit that comes out
+    // identical. The value is still stored: a later set_framing() back to
+    // STANDARD re-fits from it on the next draw.
+    if (framing_ == FitFraming::THUMBNAIL_PARITY) {
+        return;
+    }
     // The occlusion feeds the scale, not just the shift, so the framing has to
     // be recomputed rather than adjusted.
+    bounds_valid_ = false;
+    invalidate_cache();
+}
+
+void GCodeLayerRenderer::set_framing(FitFraming framing) {
+    if (framing_ == framing) {
+        return;
+    }
+    framing_ = framing;
+    // Scale, shift and placement all change with the mode, so recompute the
+    // fit and start the caches over rather than adjusting.
     bounds_valid_ = false;
     invalidate_cache();
 }
@@ -219,6 +237,16 @@ void GCodeLayerRenderer::set_support_color(lv_color_t color) {
 }
 
 void GCodeLayerRenderer::set_tool_color_palette(const std::vector<std::string>& hex_colors) {
+    if (hex_colors.empty() && !tool_palette_.has_tool_colors()) {
+        // Nothing to install and nothing to clear - bail before the join below so
+        // a file the slicer named no colors for does not kill a healthy
+        // background ghost render. Same shape as set_excluded_objects().
+        // An EMPTY palette on a renderer that HAS tool colors still goes through:
+        // that is the retraction path (a previous file's palette, or AMS
+        // overrides applied over it) and it must actually clear.
+        return;
+    }
+
     // Join the background ghost-render worker before mutating tool_palette_: the worker
     // copy-reads this member without a lock (background_ghost_render_thread), so reallocating
     // its backing vector here while the worker is mid-copy is a data race. Same discipline as
@@ -428,7 +456,7 @@ void GCodeLayerRenderer::auto_fit() {
     // Use shared auto-fit computation
     ViewMode current_view = get_view_mode();
     auto fit = helix::gcode::compute_auto_fit(bb, current_view, canvas_width_, canvas_height_,
-                                              0.05f, bottom_occlusion_);
+                                              0.05f, bottom_occlusion_, framing_);
     scale_ = fit.scale;
     offset_x_ = fit.offset_x;
     offset_y_ = fit.offset_y;
@@ -478,7 +506,7 @@ void GCodeLayerRenderer::fit_layer() {
     bounds_max_y_ = bb.max.y;
 
     auto fit = helix::gcode::compute_auto_fit(bb, ViewMode::TOP_DOWN, canvas_width_, canvas_height_,
-                                              0.05f, bottom_occlusion_);
+                                              0.05f, bottom_occlusion_, framing_);
     scale_ = fit.scale;
     offset_x_ = fit.offset_x;
     offset_y_ = fit.offset_y;
@@ -607,6 +635,17 @@ void GCodeLayerRenderer::invalidate_cache() {
 
     // Cancel any in-progress background ghost rendering
     cancel_background_ghost_render();
+
+    // A finished-but-uncopied build describes pre-invalidate state (old
+    // palette, old fit). Left pending, the next render's ready-check would
+    // copy it straight into the cleared buffer and mark the stale pixels
+    // valid - and a valid cache is never rebuilt. The thread is joined above,
+    // so the raw buffer has no concurrent writer.
+    ghost_thread_ready_.store(false);
+    ghost_raw_buffer_.reset();
+    ghost_raw_width_ = 0;
+    ghost_raw_height_ = 0;
+    ghost_raw_stride_ = 0;
 
     // Also invalidate ghost cache (new gcode = need new ghost)
     if (ghost_buf_) {
@@ -1278,8 +1317,17 @@ void GCodeLayerRenderer::render(lv_layer_t* layer, const lv_area_t* widget_area)
         } else if (gcode_) {
             // Full file mode: get segments and bounding box from parsed file
             const auto& layer_bb = gcode_->layers[current_layer_].bounding_box;
-            offset_x_ = (layer_bb.min.x + layer_bb.max.x) / 2.0f;
-            offset_y_ = (layer_bb.min.y + layer_bb.max.y) / 2.0f;
+            if (layer_bb.is_empty()) {
+                // Auxiliary-only or travel-only layer: min/max still hold the
+                // ±inf sentinels and their midpoint is NaN. Center the plate
+                // instead, the same guard fit_layer() applies.
+                const auto plate = AABB::default_plate_bbox();
+                offset_x_ = (plate.min.x + plate.max.x) / 2.0f;
+                offset_y_ = (plate.min.y + plate.max.y) / 2.0f;
+            } else {
+                offset_x_ = (layer_bb.min.x + layer_bb.max.x) / 2.0f;
+                offset_y_ = (layer_bb.min.y + layer_bb.max.y) / 2.0f;
+            }
             segments = &gcode_->layers[current_layer_].segments;
         }
 
@@ -1386,13 +1434,12 @@ bool GCodeLayerRenderer::needs_more_frames() const {
 }
 
 bool GCodeLayerRenderer::should_render_segment(const ToolpathSegment& seg) const {
-    if (seg.is_extrusion) {
-        if (is_support_segment(seg)) {
-            return show_supports_.load(std::memory_order_relaxed);
-        }
-        return show_extrusions_.load(std::memory_order_relaxed);
-    }
-    return show_travels_.load(std::memory_order_relaxed);
+    // The support answer is only read for extrusions, and resolving it costs a
+    // name lookup - do not pay that for travel segments.
+    const bool support = seg.is_extrusion && is_support_segment(seg);
+    return segment_drawable(seg, support, show_supports_.load(std::memory_order_relaxed),
+                            show_extrusions_.load(std::memory_order_relaxed),
+                            show_travels_.load(std::memory_order_relaxed));
 }
 
 void GCodeLayerRenderer::render_segment(lv_layer_t* layer, const ToolpathSegment& seg, bool ghost) {
@@ -1937,8 +1984,16 @@ bool GCodeLayerRenderer::is_ghost_build_complete() const {
     return ghost_thread_ready_.load() || ghost_cache_valid_;
 }
 
+bool GCodeLayerRenderer::has_ghost_output() const {
+    return ghost_cache_valid_;
+}
+
 bool GCodeLayerRenderer::is_ghost_build_running() const {
     return ghost_thread_running_.load();
+}
+
+bool GCodeLayerRenderer::has_first_output() const {
+    return reveal_ready_2d(has_ghost_output(), needs_more_frames(), is_ghost_build_running());
 }
 
 void GCodeLayerRenderer::background_ghost_render_thread(GhostSnapshot snap) {
@@ -2004,12 +2059,14 @@ void GCodeLayerRenderer::background_ghost_render_thread(GhostSnapshot snap) {
     // Uses name_looks_like_support() (shared with is_support_segment()) to avoid duplication.
     auto local_should_render = [&](const ToolpathSegment& seg,
                                    const std::string& obj_name) -> bool {
-        if (seg.is_extrusion) {
-            if (seg.object_name_index >= 0 && name_looks_like_support(obj_name))
-                return local_show_supports;
-            return local_show_extrusions;
-        }
-        return local_show_travels;
+        // The draw rule lives in segment_drawable(); this wrapper only feeds
+        // it the thread-safe snapshot values the worker captured at spawn.
+        // Support is resolved for extrusions only - the name scan is not free
+        // and travels never read it.
+        const bool support =
+            seg.is_extrusion && seg.object_name_index >= 0 && name_looks_like_support(obj_name);
+        return segment_drawable(seg, support, local_show_supports, local_show_extrusions,
+                                local_show_travels);
     };
 
     // Compute ghost colors once from the captured base color. First wash the base

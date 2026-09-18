@@ -4241,6 +4241,28 @@ TEST_CASE("CFS endless spool: auto-refill on and off are distinguishable",
     }
 }
 
+TEST_CASE("CFS endless spool: nothing is claimed before the first box frame",
+          "[ams][cfs][endless_spool]") {
+    // endless_spool_enabled starts false because a bool has to start somewhere,
+    // not because the firmware said so. Answering Off from it puts "will not
+    // switch spools on runout" on screen with no data behind it, and the frame
+    // that lands a couple of seconds later then contradicts it — the line
+    // appears and vanishes. Unknown says we do not know, NotReady says why.
+    CfsRemapHelper backend;
+
+    auto caps = backend.get_endless_spool_capabilities();
+    CHECK(caps.enabled == EndlessSpoolEnabled::Unknown);
+    CHECK(caps.restriction == EndlessSpoolRestriction::NotReady);
+    CHECK(caps.editability == EndlessSpoolEditability::ReadOnly);
+    CHECK_FALSE(caps.editable());
+
+    // The first real frame answers for real.
+    CfsTestAccess::handle_status(backend, make_cfs_notification(make_runout_box(0)));
+    auto answered = backend.get_endless_spool_capabilities();
+    CHECK(answered.enabled == EndlessSpoolEnabled::On);
+    CHECK(answered.restriction == EndlessSpoolRestriction::FirmwareManaged);
+}
+
 // ===========================================================================
 // Bypass declaration lifetime — what actually means "the CFS took the feed back"
 // ===========================================================================
@@ -4285,4 +4307,269 @@ TEST_CASE("CFS drops the bypass declaration for a loaded bay even while stood do
     CfsTestAccess::handle_status(cfs, make_cfs_notification(box));
 
     CHECK_FALSE(CfsTestAccess::bypass_declared(cfs));
+}
+
+// ===========================================================================
+// Flat schema (community box.py fork): what a delta may and may not overwrite
+// ===========================================================================
+//
+// Moonraker subscribes `box: null`, so these frames are deltas — a frame that
+// changed one bay carries neither the gate reading nor the endless-spool
+// enable bit. Neither may be reconstructed from a parser default: both parsers
+// default them to "no filament / off", which is a claim, not an absence.
+
+namespace {
+
+// A healthy fork box, verbatim in shape from a live K2 Plus: four occupied
+// bays, slot 0 loaded and feeding, and the runout-swap chain published because
+// runout_swap_enabled is on and a lane is loaded. Note there is no
+// filament_useup key on this fork at all — filament_detected is the gate.
+json make_flat_fork_box() {
+    return json::parse(R"({
+        "api_version": 1, "data_ready": true, "driver_ready": true,
+        "filament_detected": true, "filament_sensor_error": null,
+        "humidity_pct": 34, "loaded_mask": 1, "loaded_slot": 0,
+        "runout": {"chain": [1], "loaded_slot": 0},
+        "runout_swap_enabled": true, "slot_filament_mask": 15,
+        "state": "PRINT", "state_code": 2, "status": "OK", "status_code": 0,
+        "temp_c": 23, "tracking_active": true, "unload_after_print_enabled": false,
+        "slots": [
+            {"index": 0, "external": false, "present": true, "loaded": true,
+             "material": "PLA", "color": "#111111", "brand": "eSUN", "name": "Black PLA"},
+            {"index": 1, "external": false, "present": true, "loaded": false,
+             "material": "PLA", "color": "#F2F2F2", "brand": "eSUN", "name": "White PLA"},
+            {"index": 2, "external": false, "present": true, "loaded": false,
+             "material": "PETG", "color": "#0A2989", "brand": "Jayo", "name": "Blue PETG"},
+            {"index": 3, "external": false, "present": true, "loaded": false,
+             "material": "ABS", "color": "#C12E1F", "brand": "Jayo", "name": "Red ABS"}
+        ]
+    })");
+}
+
+} // namespace
+
+TEST_CASE("CFS flat: the runout-swap plan is not a runout event", "[ams][cfs][flat][1390]") {
+    // The plan rides every frame once a lane is loaded and swapping is on, so
+    // treating it as an event arms an episode against the lane that just
+    // loaded successfully. That episode then strips the lane's remembered
+    // Spoolman link the first time the bay reads empty — silent, permanent
+    // data loss for a fork user who also runs Spoolman.
+    CfsRemapHelper backend;
+
+    // Mid-load: gate already fed, nothing loaded yet, so no chain is published.
+    json loading = make_flat_fork_box();
+    loading["runout"] = nullptr;
+    loading["loaded_slot"] = -1;
+    loading["loaded_mask"] = 0;
+    loading["slots"][0]["loaded"] = false;
+    CfsTestAccess::handle_status(backend, make_cfs_notification(loading));
+    REQUIRE_FALSE(backend.get_system_info().filament_runout);
+
+    // Bay 0 remembers a Spoolman link. Seeded directly: the strip reads the
+    // override, and nothing about this case depends on how it got there.
+    helix::ams::FilamentSlotOverride ovr;
+    ovr.material = "PLA";
+    ovr.brand = "eSUN";
+    ovr.spool_name = "Black PLA";
+    ovr.spoolman_id = 137;
+    ovr.spoolman_vendor_id = 21;
+    CfsTestAccess::seed_override(backend, 0, ovr);
+
+    // Load completes: bay 0 feeding, gate reading true, chain published.
+    CfsTestAccess::handle_status(backend, make_cfs_notification(make_flat_fork_box()));
+    CHECK_FALSE(backend.get_system_info().filament_runout);
+
+    // The user pulls bay 0's spool later. With an episode armed against that
+    // lane, this is the poll that drops its Spoolman link for good.
+    json pulled = make_flat_fork_box();
+    pulled["slots"][0]["present"] = false;
+    pulled["slots"][0]["loaded"] = false;
+    pulled["loaded_slot"] = -1;
+    pulled["loaded_mask"] = 0;
+    CfsTestAccess::handle_status(backend, make_cfs_notification(pulled));
+
+    REQUIRE(backend.get_slot_info(0).status == SlotStatus::EMPTY);
+    auto after = CfsTestAccess::get_override(backend, 0);
+    REQUIRE(after.has_value());
+    CHECK(after->spoolman_id == 137);
+    CHECK(after->spoolman_vendor_id == 21);
+}
+
+TEST_CASE("CFS flat: a gate reading the frame did not publish leaves the latch",
+          "[ams][cfs][flat]") {
+    SECTION("a null reading does not invent a runout on a healthy box") {
+        // Klipper publishes a sensor field as null until its first read; the
+        // sibling filament_sensor_error ships that way on a healthy box. Null
+        // is "no reading", which is not the same answer as false.
+        CfsRemapHelper backend;
+        CfsTestAccess::handle_status(backend, make_cfs_notification(make_flat_fork_box()));
+        REQUIRE_FALSE(backend.get_system_info().filament_runout);
+
+        json unread = make_flat_fork_box();
+        unread["filament_detected"] = nullptr;
+        REQUIRE_NOTHROW(CfsTestAccess::handle_status(backend, make_cfs_notification(unread)));
+        CHECK_FALSE(backend.get_system_info().filament_runout);
+    }
+
+    SECTION("a null reading does not clear a latched runout") {
+        CfsRemapHelper backend;
+        json empty_gate = make_flat_fork_box();
+        empty_gate["filament_detected"] = false;
+        empty_gate["runout"] = nullptr;
+        CfsTestAccess::handle_status(backend, make_cfs_notification(empty_gate));
+        REQUIRE(backend.get_system_info().filament_runout);
+
+        json unread = make_flat_fork_box();
+        unread["filament_detected"] = nullptr;
+        unread["runout"] = nullptr;
+        CfsTestAccess::handle_status(backend, make_cfs_notification(unread));
+        CHECK(backend.get_system_info().filament_runout);
+    }
+
+    SECTION("a delta that omits the key entirely leaves the latch") {
+        CfsRemapHelper backend;
+        json empty_gate = make_flat_fork_box();
+        empty_gate["filament_detected"] = false;
+        empty_gate["runout"] = nullptr;
+        CfsTestAccess::handle_status(backend, make_cfs_notification(empty_gate));
+        REQUIRE(backend.get_system_info().filament_runout);
+
+        json delta = make_flat_fork_box();
+        delta.erase("filament_detected");
+        delta["runout"] = nullptr;
+        CfsTestAccess::handle_status(backend, make_cfs_notification(delta));
+        CHECK(backend.get_system_info().filament_runout);
+    }
+}
+
+TEST_CASE("CFS flat: a slot delta does not clear the endless-spool enable bit",
+          "[ams][cfs][flat][endless_spool]") {
+    CfsRemapHelper backend;
+
+    CfsTestAccess::handle_status(backend, make_cfs_notification(make_flat_fork_box()));
+    REQUIRE(backend.get_system_info().endless_spool_enabled);
+    REQUIRE(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::On);
+
+    // What Moonraker actually pushes when one bay changes: the slots array and
+    // nothing else. runout_swap_enabled did not change, so it is not resent —
+    // and a flat frame always carries slots, so this branch always runs.
+    json delta = make_flat_fork_box();
+    delta.erase("runout_swap_enabled");
+    delta["slots"][2]["present"] = false;
+    CfsTestAccess::handle_status(backend, make_cfs_notification(delta));
+
+    CHECK(backend.get_system_info().endless_spool_enabled);
+    CHECK(backend.get_endless_spool_capabilities().enabled == EndlessSpoolEnabled::On);
+}
+
+// ============================================================================
+// Pre-dispatch failure does not fire the envelope unwind
+// ============================================================================
+
+namespace {
+
+/// Records every gcode the backend sends through IMoonrakerAPI, and fails G28
+/// through the error callback the way Klipper reports a homing failure.
+class GcodeRecordingApi : public MoonrakerAPIMock {
+  public:
+    using MoonrakerAPIMock::MoonrakerAPIMock;
+
+    void execute_gcode(const std::string& gcode, SuccessCallback on_success,
+                       ErrorCallback on_error, uint32_t timeout_ms = 0, bool silent = false,
+                       SuccessCallback on_queued = nullptr,
+                       bool caller_surfaces_errors = true) override {
+        (void)timeout_ms;
+        (void)silent;
+        (void)on_queued;
+        (void)caller_surfaces_errors;
+        sent.push_back(gcode);
+        if (gcode == "G28" && fail_homing) {
+            if (on_error) {
+                MoonrakerError err;
+                err.type = MoonrakerErrorType::UNKNOWN;
+                err.message = "No trigger on y after full movement";
+                on_error(err);
+            }
+            return;
+        }
+        if (on_success) {
+            on_success();
+        }
+    }
+
+    bool contains(const std::string& needle) const {
+        for (const auto& g : sent) {
+            if (g.find(needle) != std::string::npos) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool fail_homing = true;
+    std::vector<std::string> sent;
+};
+
+/// CFS backend that reports the toolhead unhomed so ensure_homed_then() sends
+/// its G28, and that skips the confirmation prompt the UI would normally raise.
+class UnhomedCfsBackend : public AmsBackendCfs {
+  public:
+    UnhomedCfsBackend(IMoonrakerAPI* api, helix::IMoonrakerClient* client)
+        : AmsBackendCfs(api, client) {}
+
+    bool toolhead_homed() const override {
+        return false;
+    }
+
+};
+
+} // namespace
+
+TEST_CASE("CFS: a failed pre-op G28 does not send the envelope unwind",
+          "[ams][cfs][homing]") {
+    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::CREALITY_K1};
+    helix::PrinterState state;
+    GcodeRecordingApi api{client, state};
+
+    UnhomedCfsBackend backend{&api, &client};
+    backend.arm_home_preconfirmed(); // skip the "home first?" modal
+
+    CfsTestAccess::dispatch_action_script(backend, "CR_BOX_LOAD TNN=0");
+    // token.defer() can queue from inside a drain, so drain until quiet or the
+    // callback is left behind and the isolation-leak gate names this test.
+    for (int i = 0; i < 4; ++i) {
+        helix::ui::UpdateQueue::instance().drain();
+    }
+
+    // The G28 went out and failed, so the payload never shipped.
+    REQUIRE(api.contains("G28"));
+    REQUIRE_FALSE(api.contains("CR_BOX_LOAD"));
+
+    // Nothing was saved, so nothing may be restored. Sending the restore anyway
+    // draws a Klipper rejection that surfaces as a second error toast beside the
+    // homing failure the user actually needs to read.
+    CHECK_FALSE(api.contains("RESTORE_GCODE_STATE"));
+    CHECK_FALSE(api.contains("BOX_RESTORE_FAN"));
+}
+
+TEST_CASE("CFS: a failed payload still sends the envelope unwind", "[ams][cfs][homing]") {
+    MoonrakerClientMock client{MoonrakerClientMock::PrinterType::CREALITY_K1};
+    helix::PrinterState state;
+    GcodeRecordingApi api{client, state};
+    api.fail_homing = false; // G28 succeeds; the body is what fails
+
+    UnhomedCfsBackend backend{&api, &client};
+    backend.arm_home_preconfirmed();
+
+    // The mock acks the payload, so drive the failure through the same callback
+    // Klipper's rejection would reach.
+    CfsTestAccess::dispatch_action_script(backend, "CR_BOX_LOAD TNN=0");
+    // token.defer() can queue from inside a drain, so drain until quiet or the
+    // callback is left behind and the isolation-leak gate names this test.
+    for (int i = 0; i < 4; ++i) {
+        helix::ui::UpdateQueue::instance().drain();
+    }
+
+    REQUIRE(api.contains("G28"));
+    REQUIRE(api.contains("CR_BOX_LOAD"));
 }

@@ -9,8 +9,10 @@
 #include "gcode_selection_style.h"
 #include "gcode_streaming_controller.h"
 #include "system/crash_handler.h"
+#include "test_helpers/gcode_layer_renderer_test_access.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdio>
 #include <fstream>
 #include <glm/glm.hpp>
@@ -18,6 +20,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <unistd.h>
 #include <unordered_set>
 #include <vector>
@@ -112,6 +115,107 @@ ParsedGCodeFile make_single_object_gcode(const std::string& name, float y) {
 // =============================================================================
 // Exclude Object Support
 // =============================================================================
+
+TEST_CASE("auxiliary geometry never renders", "[layer_renderer][render_gate]") {
+    // Purge/tower segments are already outside the fit bounds; the draw gate
+    // must agree, or the tower keeps burning draw time at the frame edge.
+    GCodeLayerRenderer renderer;
+    renderer.set_show_extrusions(true);
+
+    ToolpathSegment tower;
+    tower.is_extrusion = true;
+    tower.feature_type = FeatureType::WipeTower;
+    CHECK_FALSE(GCodeLayerRendererTestAccess::renders_segment(renderer, tower));
+
+    ToolpathSegment purge;
+    purge.is_extrusion = true;
+    purge.feature_type = FeatureType::Custom;
+    CHECK_FALSE(GCodeLayerRendererTestAccess::renders_segment(renderer, purge));
+
+    // Real part geometry is untouched by the auxiliary filter.
+    ToolpathSegment wall;
+    wall.is_extrusion = true;
+    wall.feature_type = FeatureType::OuterWall;
+    CHECK(GCodeLayerRendererTestAccess::renders_segment(renderer, wall));
+
+    ToolpathSegment untyped;
+    untyped.is_extrusion = true;
+    untyped.feature_type = FeatureType::Unknown;
+    CHECK(GCodeLayerRendererTestAccess::renders_segment(renderer, untyped));
+}
+
+TEST_CASE("the ghost silhouette skips auxiliary geometry too", "[layer_renderer][render_gate]") {
+    // The ghost worker is a second consumer of the draw rule, and the one
+    // that cost a real regression: the foreground gate was filtered while
+    // the worker's own copy of the rule was not, so the prime tower stayed
+    // on screen. This drives the REAL background pass and counts lit pixels.
+    auto make_gcode = [](bool with_tower) {
+        ParsedGCodeFile gcode;
+        Layer layer;
+        layer.z_height = 0.2f;
+
+        // The part is a long diagonal that alone defines the fit bounds. The
+        // tower sits INSIDE those bounds but off the diagonal, so if the gate
+        // ever stops filtering, its square lights up hundreds of pixels the
+        // part never touches - placing it outside the fit instead would clip
+        // it out of the buffer and the test could not fail.
+        ToolpathSegment part;
+        part.start = glm::vec3(10, 10, 0.2f);
+        part.end = glm::vec3(500, 500, 0.2f);
+        part.is_extrusion = true;
+        part.extrusion_amount = 1.0f;
+        part.width = 0.4f;
+        part.feature_type = FeatureType::OuterWall;
+        layer.segments.push_back(part);
+
+        if (with_tower) {
+            ToolpathSegment tower;
+            tower.start = glm::vec3(100, 300, 0.2f);
+            tower.end = glm::vec3(200, 400, 0.2f);
+            tower.is_extrusion = true;
+            tower.extrusion_amount = 1.0f;
+            tower.width = 0.4f;
+            tower.feature_type = FeatureType::WipeTower;
+            layer.segments.push_back(tower);
+        }
+
+        gcode.layers.push_back(layer);
+        gcode.total_segments = layer.segments.size();
+        return gcode;
+    };
+
+    auto lit_pixel_count = [&make_gcode](bool with_tower) {
+        GCodeLayerRenderer renderer;
+        auto gcode = make_gcode(with_tower);
+        renderer.set_gcode(&gcode);
+        renderer.set_canvas_size(200, 200);
+        renderer.set_view_mode(GCodeLayerRenderer::ViewMode::TOP_DOWN);
+        renderer.auto_fit();
+        renderer.set_current_layer(0);
+
+        GCodeLayerRendererTestAccess::run_ghost_pass(renderer);
+        const uint8_t* px = GCodeLayerRendererTestAccess::ghost_pixels(renderer);
+        REQUIRE(px != nullptr);
+        const size_t stride = GCodeLayerRendererTestAccess::ghost_stride(renderer);
+        size_t lit = 0;
+        for (int y = 0; y < GCodeLayerRendererTestAccess::ghost_height(renderer); ++y) {
+            const uint8_t* row = px + y * stride;
+            for (int x = 0; x < GCodeLayerRendererTestAccess::ghost_width(renderer); ++x) {
+                if (row[x * 4 + 3] != 0) { // ARGB8888 alpha byte
+                    ++lit;
+                }
+            }
+        }
+        return lit;
+    };
+
+    const size_t part_only = lit_pixel_count(false);
+    const size_t with_tower = lit_pixel_count(true);
+    REQUIRE(part_only > 0); // the setup actually painted something
+    // Same fit (the tower is outside every bound), so the same part pixels -
+    // a tower leaking into the ghost would add hundreds of lit pixels.
+    CHECK(with_tower == part_only);
+}
 
 TEST_CASE("set_excluded_objects stores names and can be cleared", "[layer_renderer][exclude]") {
     GCodeLayerRenderer renderer;
@@ -1330,4 +1434,154 @@ TEST_CASE_METHOD(LVGLTestFixture, "scrubbing back down the stack keeps the selec
     // rather than the whole render having gone away.
     REQUIRE(bottom.painted > 0);
     REQUIRE(bottom.white > 0);
+}
+
+// =============================================================================
+// First-output reveal gate
+//
+// The viewer fires its one-shot first-frame callback (which hides the slicer
+// thumbnail) once the 2D canvas holds real content. The ghost copy is that
+// moment: the ghost buffer blit is the first frame with anything on it, and
+// the solid cache keeps building visibly on top of it afterwards. Waiting for
+// the full build instead left the render drawing behind a mostly-transparent
+// OrcaSlicer thumbnail for the whole build window.
+// =============================================================================
+
+TEST_CASE("reveal_ready_2d: the ghost copy alone is enough, a pending build alone is not",
+          "[layer_renderer][reveal]") {
+    // Ghost copied while the solid build still has frames to go: ready.
+    REQUIRE(reveal_ready_2d(true, true, false));
+    REQUIRE(reveal_ready_2d(true, false, false));
+    // Completed build with no ghost involved (non-FRONT views, ghost mode
+    // off): ready, same as before parity.
+    REQUIRE(reveal_ready_2d(false, false, false));
+    // Nothing on the canvas yet — still building, or the ghost thread has not
+    // finished: wait.
+    REQUIRE_FALSE(reveal_ready_2d(false, true, false));
+    REQUIRE_FALSE(reveal_ready_2d(false, true, true));
+    REQUIRE_FALSE(reveal_ready_2d(false, false, true));
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "2D reveal fires once the ghost is on the canvas while the solid build "
+                 "still needs frames",
+                 "[layer_renderer][reveal]") {
+    auto gcode = make_stacked_gcode(120);
+
+    GCodeLayerRenderer renderer;
+    renderer.set_gcode(&gcode);
+    renderer.set_view_mode(GCodeLayerRenderer::ViewMode::FRONT);
+    // Ghost mode left ON (the default): the ghost build is the first real
+    // content, so the reveal gate has to key off it.
+    renderer.set_canvas_size(200, 200);
+    renderer.set_current_layer(119);
+
+    lv_obj_t* canvas = lv_canvas_create(test_screen());
+    REQUIRE(canvas != nullptr);
+    static uint8_t canvas_buf[200 * 200 * 4];
+    lv_canvas_set_buffer(canvas, canvas_buf, 200, 200, LV_COLOR_FORMAT_ARGB8888);
+    lv_obj_update_layout(canvas);
+
+    auto frame = [&]() {
+        lv_layer_t layer;
+        lv_area_t clip = {0, 0, 199, 199};
+        lv_canvas_init_layer(canvas, &layer);
+        renderer.render(&layer, &clip);
+        lv_canvas_finish_layer(canvas, &layer);
+        lv_timer_handler_safe();
+    };
+
+    // Drive until the ghost has been copied in AND the solid cache has caught
+    // up to the top layer. needs_more_frames() covers both, so this loop is
+    // the deterministic completion signal.
+    int guard = 0;
+    while ((renderer.needs_more_frames() || renderer.is_ghost_build_running()) && guard++ < 500) {
+        frame();
+    }
+    REQUIRE(guard < 500); // harness bug, not a reveal bug
+    REQUIRE(renderer.has_ghost_output());
+    REQUIRE_FALSE(renderer.needs_more_frames());
+
+    // Scrub back down the stack: the solid cache is discarded and rebuilds
+    // progressively (layers_per_frame_ never exceeds 100, so layer 100 of 120
+    // stays mid-build after one frame), while the ghost stays on the canvas.
+    renderer.set_current_layer(100);
+    frame();
+
+    // The setup reached the branch this test exists for: real content already
+    // copied, progressive build still incomplete. The old rule (wait for
+    // needs_more_frames() to clear) reported "no first frame" here.
+    REQUIRE(renderer.has_ghost_output());
+    REQUIRE(renderer.needs_more_frames());
+    REQUIRE_FALSE(renderer.is_ghost_build_running());
+
+    REQUIRE(renderer.has_first_output());
+}
+
+TEST_CASE_METHOD(LVGLTestFixture,
+                 "invalidation discards a built-but-uncopied ghost instead of copying it stale",
+                 "[layer_renderer][reveal]") {
+    // The ghost worker can finish between draws. If invalidation (a palette
+    // change, an occluder move) leaves that finished build pending, the next
+    // render's ready-check copies it straight into the cleared buffer and
+    // marks the pre-invalidate pixels valid - a cache that is never rebuilt.
+    // With the early reveal keying off ghost output, the thumbnail would hide
+    // onto that stale frame.
+    auto gcode = make_stacked_gcode(120);
+
+    GCodeLayerRenderer renderer;
+    renderer.set_gcode(&gcode);
+    renderer.set_view_mode(GCodeLayerRenderer::ViewMode::FRONT);
+    renderer.set_canvas_size(200, 200);
+    renderer.set_current_layer(119);
+
+    lv_obj_t* canvas = lv_canvas_create(test_screen());
+    REQUIRE(canvas != nullptr);
+    static uint8_t canvas_buf[200 * 200 * 4];
+    lv_canvas_set_buffer(canvas, canvas_buf, 200, 200, LV_COLOR_FORMAT_ARGB8888);
+    lv_obj_update_layout(canvas);
+
+    auto frame = [&]() {
+        lv_layer_t layer;
+        lv_area_t clip = {0, 0, 199, 199};
+        lv_canvas_init_layer(canvas, &layer);
+        renderer.render(&layer, &clip);
+        lv_canvas_finish_layer(canvas, &layer);
+        lv_timer_handler_safe();
+    };
+
+    // One render starts the background build. Then wait for the worker to
+    // finish WITHOUT rendering again, so the raw buffer sits built-but-uncopied
+    // (ghost_thread_ready_ true, ghost_cache_valid_ false).
+    frame();
+    int guard = 0;
+    while (renderer.is_ghost_build_running() && guard++ < 500) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    REQUIRE(guard < 500);
+    REQUIRE(renderer.is_ghost_build_complete());
+    REQUIRE_FALSE(renderer.has_ghost_output()); // built, not yet copied
+
+    // The production trigger from the bug: the palette settles after the load
+    // and the detail view pushes tool colors mid-preview. Any non-empty set
+    // invalidates the caches unconditionally.
+    renderer.set_tool_color_overrides({0xFF0000u});
+
+    frame();
+
+    // The pending pre-invalidate build must be gone: one frame after
+    // invalidation there is no ghost output. (Before the fix, this frame
+    // copied the stale buffer and reported output.) Whether the replacement
+    // build is still running at this instant is timing - a 120-layer ghost
+    // finishes in well under a frame - so the invariant is "no stale output",
+    // not "mid-build".
+    REQUIRE_FALSE(renderer.has_ghost_output());
+
+    // And the rebuild completes normally, leaving real output.
+    guard = 0;
+    while ((renderer.is_ghost_build_running() || renderer.needs_more_frames()) && guard++ < 500) {
+        frame();
+    }
+    REQUIRE(guard < 500);
+    REQUIRE(renderer.has_ghost_output());
 }

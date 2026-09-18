@@ -232,6 +232,7 @@ src/ui/action_prompt_manager.cpp
 src/ui/ams_drawing_utils.cpp
 src/ui/backdrop_blur.cpp
 src/ui/bed_mesh_profile_name.cpp
+src/ui/chamber_assignment_options.cpp
 src/ui/console_filter_engine.cpp
 src/ui/fan_spin_animation.cpp
 src/ui/fault_modal_registry.cpp
@@ -459,6 +460,8 @@ src/ui/ui_spool_wizard.cpp
 src/ui/ui_status_pill.cpp
 src/ui/ui_step_progress.cpp
 src/ui/ui_subscription_guard.cpp
+src/ui/ui_search_debounce.cpp
+src/ui/ui_coalesced_timer.cpp
 src/ui/ui_swatch.cpp
 src/ui/ui_switch.cpp
 src/ui/ui_system_path_canvas.cpp

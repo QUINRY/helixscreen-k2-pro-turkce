@@ -27,10 +27,6 @@
     <px name="metadata_clip_height_xlarge" value="156"/>
     <px name="metadata_clip_height_xxlarge" value="196"/>
   </consts>
-  <styles>
-    <!-- Fully transparent but still takes up layout space -->
-    <style name="invisible" opa="0"/>
-  </styles>
   <!-- Print Status Panel - Active print monitoring with G-code 3D viewer -->
   <!-- Uses same sizing as print_file_detail: overlay_width_transient_large, 5:4 flex ratio -->
   <view name="print_status_panel"
@@ -73,8 +69,7 @@
                 width="100%" height="content" style_pad_left="#space_md" style_pad_right="#space_md" style_pad_top="0"
                 flex_flow="row" style_flex_cross_place="center" style_pad_gap="#space_sm" scrollable="false"
                 clickable="true">
-          <bind_flag_if_eq subject="ui_breakpoint" flag="hidden" ref_value="1"/>
-          <bind_flag_if_eq subject="ui_breakpoint" flag="hidden" ref_value="2"/>
+          <bind_flag_if cond="ui_breakpoint eq 1 or ui_breakpoint eq 2" flag="hidden"/>
           <event_cb trigger="clicked" callback="on_print_status_tune"/>
           <text_small text="Speed" clickable="false" event_bubble="true"/>
           <text_small name="speed_value" bind_text="print_speed_text" clickable="false" event_bubble="true"/>

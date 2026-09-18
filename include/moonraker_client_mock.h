@@ -837,6 +837,27 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
         toggle_filament_runout();
     }
 
+    /**
+     * @brief Park or resume the simulation loop
+     *
+     * While parked the loop dispatches no status notifications and the tick
+     * counter stands still, so simulated time does not advance either.
+     *
+     * Every push carries a full snapshot, and PrinterState applies any field
+     * that differs from the subject's own value, so a push landing between a
+     * test's `set` and its read undoes the write. Parking the loop is what
+     * makes a value written by hand hold still long enough to measure.
+     *
+     * @param paused true to park the loop, false to resume it
+     */
+    void set_simulation_paused(bool paused) {
+        {
+            std::lock_guard<std::mutex> lock(sim_mutex_);
+            simulation_paused_.store(paused);
+        }
+        sim_cv_.notify_all();
+    }
+
     // ========== Bed Mesh Accessors (Mock-specific) ==========
     // These were removed from MoonrakerClient and moved to MoonrakerAPI.
     // The mock needs its own accessors for test validation.
@@ -1534,6 +1555,8 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
     std::atomic<bool> simulation_running_{false};
     std::mutex sim_mutex_;           // For condition variable wait
     std::condition_variable sim_cv_; // For interruptible sleep during shutdown
+    // set_simulation_paused(): the loop parks on this, dispatching nothing
+    std::atomic<bool> simulation_paused_{false};
 
     // Protects the discovery_ name lists (heaters/fans/sensors/leds/filament_sensors)
     // against the temperature simulation thread.
@@ -1611,6 +1634,35 @@ class MoonrakerClientMock : public helix::MoonrakerClient {
 
     /// Advance the armed swap by one notification interval. No-op when idle.
     void advance_medusa_swap();
+
+    // --- Standalone IFS module mock -----------------------------------------
+    // HELIX_MOCK_AMS=ifs-module: pushes the module's objects (ifs /
+    // ifs_materials plus its stock-named lane/toolhead sensors) so real
+    // discovery sets AmsType::AD5X_IFS and the PRODUCTION AmsBackendAd5xIfs
+    // runs against pushed frames — try_create_mock() declines this value, same
+    // rule as the MedusaHC modes. gcode_script() folds T<n> and the IFS_*
+    // macros into the state below; the periodic notification publishes it.
+    bool is_mock_ifs_module() const;
+    /// The `ifs` object frame.
+    [[nodiscard]] nlohmann::json ifs_module_status_json() const;
+    /// The `ifs_materials` object frame (slot registry view).
+    [[nodiscard]] nlohmann::json ifs_module_materials_json() const;
+    /// The save_variables fragment carrying the module's own records.
+    [[nodiscard]] nlohmann::json ifs_module_vars_json() const;
+    /// Apply one IFS-module gcode command token. @return true when the token
+    /// was one of ours (the caller then stops walking the generic chain).
+    bool apply_ifs_module_gcode(const std::string& cmd, const std::string& gcode);
+    /// Lane in the nozzle (1-4, 0 = none) — the module's `ifs_loaded` record.
+    std::atomic<int> ifs_module_loaded_{0};
+    /// Per-lane silk presence bitmask, bit i = lane i+1.
+    std::atomic<uint8_t> ifs_module_presence_{0x0F};
+    /// Slot -> {type, bare-hex colour}; IFS_SET_MATERIAL writes land here.
+    mutable std::mutex ifs_module_materials_mutex_;
+    std::map<int, std::pair<std::string, std::string>> ifs_module_materials_{
+        {1, {"PLA", "A03CF7"}},
+        {2, {"PETG", "00FF00"}},
+        {3, {"ABS", "FF8800"}},
+        {4, {"TPU", "FFFFFF"}}};
 
     // Additional objects for testing (e.g., "mmu", "AFC", "toolchanger")
     std::vector<std::string> additional_objects_;

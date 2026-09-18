@@ -17,7 +17,9 @@
     "macro_match": "Match against G-code macro names (gcode_macro objects)",
     "macro_exclude": "Exclude this printer if a G-code macro is present",
     "tool_count": "Count of extruder tools (tool_count_1, tool_count_2, tool_count_4)",
-    "cpu_arch_match": "Match against host CPU architecture string"
+    "cpu_arch_match": "Match against host CPU architecture string",
+    "_modifier_corroborating": "Set true on a heuristic whose evidence names a CLASS of printer rather than a model: a chamber thermistor (every enclosed machine has one) or an MCU claimed by more than one manufacturer. It still adds to the match bonus but can never be the base score, so it cannot identify a printer on its own. A chip only one vendor uses stays identifying.",
+    "_modifier_identifying": "Set true on a build_volume_range whose window is distinctive enough to lead. Volumes are corroborating by default because models overlap in the common bands; this opts an unusual size back in. It still needs the entry's kinematics to match, so a size alone never names a printer."
   },
   "console_filter_sets": {
     "creality_rs485": {
@@ -25,7 +27,7 @@
       "patterns": [
         "prefix:// data_send:",
         "prefix:// send float_bytes:",
-        "prefix:// sys\u53c2\u6570\u64cd\u4f5c",
+        "prefix:// sys参数操作",
         "substring:b'\\x"
       ]
     },
@@ -166,6 +168,13 @@
           "pattern": "ad5x",
           "confidence": 0,
           "reason": "Exclude AD5X from matching as AD5M"
+        },
+        {
+          "type": "led_exclude",
+          "field": "leds",
+          "pattern": "chamber_l",
+          "confidence": 0,
+          "reason": "Exclude the enclosed Pro (only it has a chamber light)"
         }
       ],
       "pre_print_options": {
@@ -185,7 +194,8 @@
             "adaptive_value": "1"
           }
         ]
-      }
+      },
+      "toolhead_style": "default"
     },
     {
       "id": "flashforge_adventurer_5m_forgex",
@@ -273,6 +283,13 @@
           "pattern": "ad5x",
           "confidence": 0,
           "reason": "Exclude AD5X from matching as AD5M"
+        },
+        {
+          "type": "led_exclude",
+          "field": "leds",
+          "pattern": "chamber_l",
+          "confidence": 0,
+          "reason": "Exclude the enclosed Pro (only it has a chamber light)"
         }
       ],
       "pre_print_options": {
@@ -292,7 +309,8 @@
             "adaptive_value": "1"
           }
         ]
-      }
+      },
+      "toolhead_style": "default"
     },
     {
       "id": "flashforge_ad5m_pro",
@@ -408,7 +426,8 @@
             "adaptive_value": "1"
           }
         ]
-      }
+      },
+      "toolhead_style": "default"
     },
     {
       "id": "flashforge_ad5m_pro_forgex",
@@ -536,7 +555,8 @@
             "adaptive_value": "1"
           }
         ]
-      }
+      },
+      "toolhead_style": "default"
     },
     {
       "id": "flashforge_ad5x",
@@ -553,6 +573,13 @@
           "pattern": "zmod_ifs",
           "confidence": 98,
           "reason": "[zmod_ifs] section - AD5X IFS firmware (matches zmod_ifs, zmod_ifs_switch_sensor, zmod_ifs_motion_sensor, etc.)"
+        },
+        {
+          "type": "object_exists",
+          "field": "printer_objects",
+          "pattern": "ifs_materials",
+          "confidence": 98,
+          "reason": "[ifs_materials] section - standalone AD5X IFS module (Forge-X drop-in); unambiguous, no other firmware defines it"
         },
         {
           "type": "macro_match",
@@ -617,7 +644,8 @@
           "confidence": 30,
           "reason": "CoreXY kinematics"
         }
-      ]
+      ],
+      "toolhead_style": "default"
     },
     {
       "id": "voron_2_4",
@@ -729,7 +757,8 @@
           "max_x": 130,
           "max_y": 130,
           "confidence": 70,
-          "reason": "Small build volume (~120mm, Voron 0 size)"
+          "reason": "Small build volume (~120mm, Voron 0 size)",
+          "identifying": true
         },
         {
           "type": "object_exists",
@@ -975,7 +1004,9 @@
           }
         ]
       },
-      "console_filters": ["creality_macro_chatter"],
+      "console_filters": [
+        "creality_macro_chatter"
+      ],
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -989,7 +1020,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "fan_match",
@@ -1064,7 +1096,9 @@
           }
         ]
       },
-      "console_filters": ["creality_macro_chatter"],
+      "console_filters": [
+        "creality_macro_chatter"
+      ],
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -1078,7 +1112,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "fan_match",
@@ -1160,7 +1195,9 @@
           }
         ]
       },
-      "console_filters": ["creality_macro_chatter"],
+      "console_filters": [
+        "creality_macro_chatter"
+      ],
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -1174,7 +1211,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "fan_match",
@@ -1256,7 +1294,9 @@
           }
         ]
       },
-      "console_filters": ["creality_macro_chatter"],
+      "console_filters": [
+        "creality_macro_chatter"
+      ],
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -1270,7 +1310,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "fan_match",
@@ -1342,7 +1383,10 @@
       "probe_type": "prtouch_v3",
       "preset": "k2",
       "print_start_profile": "creality_k2",
-      "console_filters": ["creality_rs485", "creality_k2_modules"],
+      "console_filters": [
+        "creality_rs485",
+        "creality_k2_modules"
+      ],
       "pre_print_options": {
         "macro_name": "START_PRINT",
         "setup_gcode": "PRINT_PREPARED",
@@ -1382,7 +1426,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor"
+          "reason": "Chamber temperature sensor",
+          "corroborating": true
         },
         {
           "type": "object_exists",
@@ -1474,7 +1519,10 @@
       "probe_type": "prtouch_v3",
       "preset": "k2",
       "print_start_profile": "creality_k2",
-      "console_filters": ["creality_rs485", "creality_k2_modules"],
+      "console_filters": [
+        "creality_rs485",
+        "creality_k2_modules"
+      ],
       "pre_print_options": {
         "macro_name": "START_PRINT",
         "setup_gcode": "PRINT_PREPARED",
@@ -1514,7 +1562,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor"
+          "reason": "Chamber temperature sensor",
+          "corroborating": true
         },
         {
           "type": "object_exists",
@@ -1626,7 +1675,9 @@
           }
         ]
       },
-      "console_filters": ["creality_macro_chatter"],
+      "console_filters": [
+        "creality_macro_chatter"
+      ],
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -1640,7 +1691,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "fan_match",
@@ -1701,7 +1753,9 @@
           }
         ]
       },
-      "console_filters": ["creality_macro_chatter"],
+      "console_filters": [
+        "creality_macro_chatter"
+      ],
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -1715,7 +1769,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "fan_match",
@@ -1779,7 +1834,9 @@
           }
         ]
       },
-      "console_filters": ["creality_macro_chatter"],
+      "console_filters": [
+        "creality_macro_chatter"
+      ],
       "heuristics": [
         {
           "type": "kinematics_match",
@@ -1793,7 +1850,8 @@
           "field": "sensors",
           "pattern": "chamber_temp",
           "confidence": 70,
-          "reason": "Chamber temperature sensor"
+          "reason": "Chamber temperature sensor",
+          "corroborating": true
         },
         {
           "type": "hostname_match",
@@ -1888,7 +1946,8 @@
           "field": "mcu",
           "pattern": "GD32F303",
           "confidence": 30,
-          "reason": "GD32F303 main MCU (Creality CR4NU board)"
+          "reason": "GD32F303 main MCU (Creality CR4NU board)",
+          "corroborating": true
         }
       ]
     },
@@ -2100,7 +2159,8 @@
           "field": "mcu",
           "pattern": "STM32F103",
           "confidence": 30,
-          "reason": "STM32F103 MCU (common Creality board)"
+          "reason": "STM32F103 MCU (common Creality board)",
+          "corroborating": true
         },
         {
           "type": "hostname_match",
@@ -2765,7 +2825,8 @@
           "field": "sensors",
           "pattern": "chamber",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "object_exists",
@@ -2831,7 +2892,8 @@
           "field": "mcu",
           "pattern": "rp2040",
           "confidence": 45,
-          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)"
+          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)",
+          "corroborating": true
         }
       ]
     },
@@ -2856,7 +2918,8 @@
           "field": "sensors",
           "pattern": "chamber",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "object_exists",
@@ -2918,15 +2981,16 @@
           "type": "macro_match",
           "field": "macros",
           "pattern": "M4029",
-          "confidence": 70,
-          "reason": "M4029 calibration macro (QIDI Plus 4 specific)"
+          "confidence": 45,
+          "reason": "M4029 calibration macro (QIDI stock firmware, shared across the range)"
         },
         {
           "type": "mcu_match",
           "field": "mcu",
           "pattern": "rp2040",
           "confidence": 45,
-          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)"
+          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)",
+          "corroborating": true
         }
       ]
     },
@@ -2950,7 +3014,8 @@
           "field": "sensors",
           "pattern": "chamber",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "object_exists",
@@ -3016,7 +3081,8 @@
           "field": "mcu",
           "pattern": "rp2040",
           "confidence": 45,
-          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)"
+          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)",
+          "corroborating": true
         }
       ]
     },
@@ -3040,7 +3106,8 @@
           "field": "sensors",
           "pattern": "chamber",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "object_exists",
@@ -3089,7 +3156,8 @@
           "field": "mcu",
           "pattern": "rp2040",
           "confidence": 45,
-          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)"
+          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)",
+          "corroborating": true
         }
       ]
     },
@@ -3151,7 +3219,8 @@
           "field": "mcu",
           "pattern": "rp2040",
           "confidence": 45,
-          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)"
+          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)",
+          "corroborating": true
         }
       ]
     },
@@ -3235,7 +3304,8 @@
           "field": "sensors",
           "pattern": "Chamber_Thermal_Protection",
           "confidence": 50,
-          "reason": "Chamber thermal protection sensor (QIDI Max 4 stock config)"
+          "reason": "Chamber thermal protection sensor (QIDI Max 4 stock config)",
+          "corroborating": true
         },
         {
           "type": "hostname_match",
@@ -3289,7 +3359,8 @@
           "field": "sensors",
           "pattern": "chamber",
           "confidence": 70,
-          "reason": "Chamber temperature sensor (enclosed printer)"
+          "reason": "Chamber temperature sensor (enclosed printer)",
+          "corroborating": true
         },
         {
           "type": "object_exists",
@@ -3301,12 +3372,12 @@
         {
           "type": "build_volume_range",
           "field": "bed_mesh",
-          "min_x": 230,
-          "max_x": 260,
-          "min_y": 230,
-          "max_y": 260,
+          "min_x": 245,
+          "max_x": 290,
+          "min_y": 245,
+          "max_y": 310,
           "confidence": 50,
-          "reason": "Build volume ~245mm (Q2 size)"
+          "reason": "Build volume ~250x250 (Q2 print area, pos_max 275x295)"
         },
         {
           "type": "hostname_match",
@@ -3344,11 +3415,18 @@
           "reason": "CLEAR_NOZZLE macro (common on QIDI printers)"
         },
         {
+          "type": "macro_match",
+          "field": "macros",
+          "pattern": "M4029",
+          "confidence": 45,
+          "reason": "M4029 calibration macro (QIDI stock firmware, shared across the range)"
+        },
+        {
           "type": "mcu_match",
           "field": "mcu",
-          "pattern": "rp2040",
-          "confidence": 45,
-          "reason": "RP2040 toolhead MCU (QIDI dual-MCU design)"
+          "pattern": "STM32F407",
+          "confidence": 35,
+          "reason": "STM32F407 main MCU (QIDI new-generation board)"
         }
       ]
     },
@@ -3401,7 +3479,8 @@
           "field": "mcu",
           "pattern": "GD32F303",
           "confidence": 40,
-          "reason": "GD32F303 MCU (MKS Robin Nano V2 clone)"
+          "reason": "GD32F303 MCU (MKS Robin Nano V2 clone)",
+          "corroborating": true
         }
       ]
     },
@@ -3465,7 +3544,8 @@
           "field": "mcu",
           "pattern": "GD32F303",
           "confidence": 40,
-          "reason": "GD32F303 MCU (MKS Robin Nano)"
+          "reason": "GD32F303 MCU (MKS Robin Nano)",
+          "corroborating": true
         }
       ]
     },
@@ -4053,7 +4133,8 @@
           "field": "mcu",
           "pattern": "STM32F103",
           "confidence": 25,
-          "reason": "STM32F103 MCU (stock Sovol SV08 board)"
+          "reason": "STM32F103 MCU (stock Sovol SV08 board)",
+          "corroborating": true
         }
       ]
     },
@@ -5851,7 +5932,8 @@
           "field": "mcu",
           "pattern": "rp2040",
           "confidence": 40,
-          "reason": "RP2040 MCU (SKR Pico board)"
+          "reason": "RP2040 MCU (SKR Pico board)",
+          "corroborating": true
         },
         {
           "type": "build_volume_range",
@@ -6045,7 +6127,8 @@
           "field": "sensors",
           "pattern": "chamber",
           "confidence": 60,
-          "reason": "Chamber temperature sensor (enclosed Nebula)"
+          "reason": "Chamber temperature sensor (enclosed Nebula)",
+          "corroborating": true
         }
       ]
     },
@@ -6094,7 +6177,8 @@
           "field": "sensors",
           "pattern": "chamber",
           "confidence": 60,
-          "reason": "Chamber temperature sensor (enclosed Nebula)"
+          "reason": "Chamber temperature sensor (enclosed Nebula)",
+          "corroborating": true
         }
       ]
     },

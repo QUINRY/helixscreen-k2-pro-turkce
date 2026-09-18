@@ -129,6 +129,29 @@ TEST_CASE_METHOD(ExpectedRestartFixture,
     CHECK(notifications.empty()); // direct toast - no history row
 }
 
+TEST_CASE_METHOD(ExpectedRestartFixture,
+                 "the recovery window outlasts a real config-write restart",
+                 "[recovery][expectedrestart]") {
+    // A K2 Plus takes ~17s from SAVE_CONFIG to klippy READY. A window that
+    // expires first puts a "Printer Shutdown" dialog on screen in the middle of
+    // a Save that succeeded, then dismisses it a couple of seconds later when
+    // klippy reports ready.
+    //
+    // lv_tick_inc() rather than process_lvgl(): is_recovery_suppressed() only
+    // reads the tick, so no timer needs to come due and 17s of virtual time
+    // costs nothing here.
+    helix::ui::begin_expected_klippy_restart("Saving config... Klipper will restart.");
+    settle();
+    REQUIRE(EmergencyStopOverlay::instance().is_recovery_suppressed());
+
+    lv_tick_inc(17000);
+    CHECK(EmergencyStopOverlay::instance().is_recovery_suppressed());
+
+    // ...and still lets go, so a host that goes down and stays down is reported.
+    lv_tick_inc(4000);
+    CHECK_FALSE(EmergencyStopOverlay::instance().is_recovery_suppressed());
+}
+
 TEST_CASE_METHOD(ExpectedRestartFixture, "z-offset apply-and-save initiates the restart contract",
                  "[expectedrestart][zoffset][1359]") {
     helix::ui::SaveConfigWatch save_watch;
@@ -187,6 +210,61 @@ TEST_CASE_METHOD(ExpectedRestartFixture,
 
     CHECK(error.empty());
     CHECK(saved);
+}
+
+TEST_CASE_METHOD(ExpectedRestartFixture,
+                 "a completed z-offset save clears the pending delta, and not before",
+                 "[expectedrestart][zoffset]") {
+    // The pending delta is what the UI shows as "unsaved". Leaving it set after a
+    // successful save reports a saved offset as still pending, and the next
+    // adjustment stacks on top of a number the printer has already persisted.
+    //
+    // Clearing it must also wait for the save to be KNOWN good: SAVE_CONFIG's own
+    // rpc is dropped by the restart it causes, so the only proof is Klipper
+    // coming back READY.
+    get_printer_state().init_subjects(false);
+    get_printer_state().set_klippy_state_sync(helix::KlippyState::READY);
+
+    state.add_pending_z_offset_delta(50);
+    REQUIRE(lv_subject_get_int(state.get_pending_z_offset_delta_subject()) == 50);
+
+    bool saved = false;
+    helix::ui::SaveConfigWatch save_watch;
+    helix::zoffset::apply_and_save(
+        &api, save_watch, helix::ZOffsetCalibrationStrategy::PROBE_CALIBRATE, [&] { saved = true; },
+        [](const std::string&) {}, &state);
+    settle();
+
+    // The gcode is out but nothing is known yet, so the delta must still stand.
+    CHECK_FALSE(saved);
+    CHECK(lv_subject_get_int(state.get_pending_z_offset_delta_subject()) == 50);
+
+    // Klipper comes back — that is what says the save worked.
+    get_printer_state().set_klippy_state_sync(helix::KlippyState::STARTUP);
+    get_printer_state().set_klippy_state_sync(helix::KlippyState::READY);
+    settle();
+
+    CHECK(saved);
+    CHECK(lv_subject_get_int(state.get_pending_z_offset_delta_subject()) == 0);
+}
+
+TEST_CASE_METHOD(ExpectedRestartFixture,
+                 "a firmware-managed z-offset save also clears the pending delta",
+                 "[expectedrestart][zoffset]") {
+    // The other success path. Firmware persists the offset itself, so nothing is
+    // sent and there is no restart to wait for — but the offset is just as saved,
+    // and the delta has to go with it.
+    state.add_pending_z_offset_delta(50);
+    REQUIRE(lv_subject_get_int(state.get_pending_z_offset_delta_subject()) == 50);
+
+    bool saved = false;
+    helix::ui::SaveConfigWatch save_watch;
+    helix::zoffset::apply_and_save(
+        &api, save_watch, helix::ZOffsetCalibrationStrategy::FIRMWARE_MANAGED,
+        [&] { saved = true; }, [](const std::string&) {}, &state);
+
+    CHECK(saved);
+    CHECK(lv_subject_get_int(state.get_pending_z_offset_delta_subject()) == 0);
 }
 
 TEST_CASE_METHOD(ExpectedRestartFixture, "bed-mesh SAVE_CONFIG initiates the restart contract",

@@ -27,6 +27,7 @@
 
 #include "../test_fixtures.h"
 #include "../test_helpers/grid_edit_mode_test_access.h"
+#include "../test_helpers/scoped_animations_enabled.h"
 #include "config.h"
 #include "display_settings_manager.h"
 #include "grid_edit_mode.h"
@@ -43,32 +44,6 @@
 using namespace helix;
 
 namespace {
-
-/// HelixTestFixture forces animations OFF for every test (see the long note in
-/// tests/helix_test_fixture.cpp — modal exit timing). commit_resize_with_snap()
-/// only animates when they are ON, so without this the whole snap-animation
-/// branch is skipped and every assertion below passes against nothing.
-class ScopedAnimationsEnabled {
-  public:
-    ScopedAnimationsEnabled() {
-        subject_ = lv_xml_get_subject(nullptr, "settings_animations_enabled");
-        if (subject_) {
-            prev_ = lv_subject_get_int(subject_);
-            lv_subject_set_int(subject_, 1);
-        }
-    }
-    ~ScopedAnimationsEnabled() {
-        if (subject_) {
-            lv_subject_set_int(subject_, prev_);
-        }
-    }
-    ScopedAnimationsEnabled(const ScopedAnimationsEnabled&) = delete;
-    ScopedAnimationsEnabled& operator=(const ScopedAnimationsEnabled&) = delete;
-
-  private:
-    lv_subject_t* subject_ = nullptr;
-    int prev_ = 0;
-};
 
 constexpr int COLSPAN = 2;
 constexpr int ROWSPAN = 2;
@@ -189,7 +164,10 @@ void commit_snap_resize(GridEditMode& em) {
 TEST_CASE_METHOD(XMLTestFixture,
                  "GridEditMode: snap animation is cancelled when its preview widget dies",
                  "[grid_edit][grid_edit_snap_anim]") {
-    ScopedAnimationsEnabled animations_on;
+    helix::ui::ScopedAnimationsEnabled animations_on;
+    // A null subject makes the preference a no-op, and the snap branch below
+    // only runs with animations ON — every assertion would pass against nothing.
+    REQUIRE(animations_on.available());
     REQUIRE(DisplaySettingsManager::instance().get_animations_enabled());
 
     ResizeScene scene(test_screen(), "test_grid_edit_snap_anim_preview_death");
@@ -228,7 +206,10 @@ TEST_CASE_METHOD(XMLTestFixture,
 
 TEST_CASE_METHOD(XMLTestFixture, "GridEditMode: exit() cancels an in-flight snap animation",
                  "[grid_edit][grid_edit_snap_anim]") {
-    ScopedAnimationsEnabled animations_on;
+    helix::ui::ScopedAnimationsEnabled animations_on;
+    // A null subject makes the preference a no-op, and the snap branch below
+    // only runs with animations ON — every assertion would pass against nothing.
+    REQUIRE(animations_on.available());
     REQUIRE(DisplaySettingsManager::instance().get_animations_enabled());
 
     ResizeScene scene(test_screen(), "test_grid_edit_snap_anim_exit");
@@ -254,7 +235,10 @@ TEST_CASE_METHOD(XMLTestFixture, "GridEditMode: exit() cancels an in-flight snap
 
 TEST_CASE_METHOD(XMLTestFixture, "GridEditMode: destruction cancels an in-flight snap animation",
                  "[grid_edit][grid_edit_snap_anim]") {
-    ScopedAnimationsEnabled animations_on;
+    helix::ui::ScopedAnimationsEnabled animations_on;
+    // A null subject makes the preference a no-op, and the snap branch below
+    // only runs with animations ON — every assertion would pass against nothing.
+    REQUIRE(animations_on.available());
     REQUIRE(DisplaySettingsManager::instance().get_animations_enabled());
 
     ResizeScene scene(test_screen(), "test_grid_edit_snap_anim_destruction");

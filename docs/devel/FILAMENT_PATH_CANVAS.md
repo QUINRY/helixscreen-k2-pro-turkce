@@ -103,7 +103,7 @@ panels push printer state through the C setters.
 ## The Three-Layer Model
 
 Rendering is split into three layers so per-frame animation never repaints the
-expensive tube geometry (`ui_filament_path_internal.h:17-26`).
+expensive tube geometry (`src/ui/ui_filament_path_internal.h`).
 
 ```cpp
 struct LayerState {
@@ -299,7 +299,7 @@ devices without the caller branching.
 ## RenderCtx & Phase Decomposition
 
 The render pass threads a small context through every phase
-(`ui_filament_path_internal.h:383`):
+(`src/ui/ui_filament_path_internal.h#RenderCtx`):
 
 ```cpp
 struct RenderCtx {
@@ -355,7 +355,7 @@ three-function pass.
 
 ## Topology Renderers
 
-The supported topologies are `PathTopology` (`include/ams_types.h:544`):
+The supported topologies are `PathTopology` (`include/ams_types.h#PathTopology`):
 
 ```cpp
 enum class PathTopology {
@@ -367,7 +367,7 @@ enum class PathTopology {
 ```
 
 Filament position along a path is tracked by `PathSegment`
-(`include/ams_types.h:622`): `NONE, SPOOL, PREP, LANE, HUB, OUTPUT, TOOLHEAD,
+(`include/ams_types.h#PathSegment`): `NONE, SPOOL, PREP, LANE, HUB, OUTPUT, TOOLHEAD,
 NOZZLE`.
 
 | Topology | Renderer | Shape |
@@ -411,7 +411,7 @@ single source of truth, no geometry re-derivation.
 ### What invalidates what
 
 State setters call `layered_mark_dirty(obj, static_dirty, overlay_dirty)`
-(`ui_filament_path_layers.cpp:183`):
+(`src/ui/ui_filament_path_layers.cpp#layered_mark_dirty`):
 
 ```cpp
 void layered_mark_dirty(lv_obj_t* obj, bool static_dirty, bool overlay_dirty) {
@@ -421,7 +421,8 @@ void layered_mark_dirty(lv_obj_t* obj, bool static_dirty, bool overlay_dirty) {
         if (overlay_dirty) data->layers.overlay_dirty = true;
         if (overlay_dirty) data->path_cache.valid = false;  // force re-record
         if (data->layers.static_canvas)
-            lv_async_call(layered_refresh_async, obj);       // deduped repaint
+            data->layers.refresh_timer.schedule_once(        // one repaint per burst
+                [obj]() { layered_refresh(obj); });
     }
     lv_obj_invalidate(obj);  // schedule the cheap DRAW_POST pass
 }
@@ -433,7 +434,7 @@ void layered_mark_dirty(lv_obj_t* obj, bool static_dirty, bool overlay_dirty) {
 | Filament color / segment / per-slot / active-slot / bypass / buffer change | overlay | Overlay canvas repaint; `path_cache` invalidated for re-record |
 | Animation tick (flow / heat / segment tip) | *(neither)* | `lv_obj_invalidate(obj)` only → DRAW_POST pass, no canvas work |
 
-`layered_refresh_async()` runs outside the render phase: it early-returns until
+`layered_refresh()` runs outside the render phase: it early-returns until
 the widget has a real size (`w>0 && h>0`), reallocates buffers on size change
 (`layered_ensure_buffers()`), repaints only the dirty layers, then clears the
 flags. A `SIZE_CHANGED` event (`layered_size_changed_cb()`) re-marks both layers

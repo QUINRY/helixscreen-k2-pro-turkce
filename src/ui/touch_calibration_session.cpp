@@ -20,6 +20,9 @@ void write_affine(Config& cfg, const TouchCalibration& cal) {
     cfg.set<double>("/input/calibration/d", static_cast<double>(cal.d));
     cfg.set<double>("/input/calibration/e", static_cast<double>(cal.e));
     cfg.set<double>("/input/calibration/f", static_cast<double>(cal.f));
+    // Without this the matrix is unplaceable: it was solved against logical,
+    // post-rotation targets, so it only means anything relative to a rotation.
+    cfg.set<int>("/input/calibration/rotation", cal.capture_rotation);
 }
 
 } // namespace
@@ -34,7 +37,12 @@ bool commit_calibration_result(ICalibrationSink* sink, const TouchCalibration& c
         sink->apply_touch_range(fit.swap_axes, fit.min_x, fit.min_y, fit.max_x, fit.max_y);
 
     // Exactly one of these two describes the mapping from here on.
-    const TouchCalibration affine = range_installed ? fit.residual : cal;
+    TouchCalibration affine = range_installed ? fit.residual : cal;
+    // The residual re-parameterises the same solve over the same logical targets,
+    // so it lives in the same basis as the matrix it came from. Provenance is
+    // stamped once, where the solve happens, and every form derived from it
+    // inherits it here rather than depending on who chose to compute a range.
+    affine.capture_rotation = cal.capture_rotation;
 
     if (Config* cfg = Config::get_instance()) {
         TouchRangeSettings range;

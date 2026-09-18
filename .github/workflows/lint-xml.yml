@@ -2,7 +2,13 @@ name: XML Lint
 
 on:
   push:
-    branches: [ main, "claude/**" ]
+    branches:
+      - main
+      - "claude/**"
+      # Report branches carry a worker's STATUS.md over a full tree. Nothing
+      # in them is code, and each push otherwise queues a whole build.
+      - "!claude/report-*"
+      - "release/**"
     paths:
       - 'ui_xml/**'
       - 'src/ui/**'
@@ -12,7 +18,7 @@ on:
       - 'mk/tools.mk'
       - '.github/workflows/lint-xml.yml'
   pull_request:
-    branches: [ main ]
+    branches: [ main, "release/**" ]
     paths:
       - 'ui_xml/**'
       - 'src/ui/**'

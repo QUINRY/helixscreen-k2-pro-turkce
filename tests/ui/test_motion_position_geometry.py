@@ -35,10 +35,12 @@ Mutation map (each assertion against its fix half):
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 import pytest
 
+from conftest import ARTIFACT_ROOT, dump_failure_diagnostics
 from helix.app import HelixApp, HelixCtlError
 
 _BINARY = Path(os.environ.get(
@@ -55,6 +57,10 @@ _SIZES = ["800x480", "1024x600", "1280x720", "480x800"]
 # actual -> 0.50 mm divergence, far over the 0.01 mm Act threshold.
 _Z_EQUAL = 250
 _Z_DIVERGED = 300
+
+# The mock printer dispatches a status notification every fourth 250 ms physics
+# tick (NOTIFICATION_INTERVAL_TICKS in moonraker_client_mock.h).
+_MOCK_PUSH_INTERVAL_S = 1.0
 
 
 def _geom(app: HelixApp, target: str) -> dict:
@@ -73,13 +79,44 @@ def _act_text(app: HelixApp) -> str | None:
         return None
 
 
+def _assert_z_subjects(app: HelixApp, size: str, gcode: int, actual: int) -> None:
+    """Fail if the Z subjects do not hold what the caller just wrote.
+
+    Both states this test measures are reachable without either `set` landing:
+    a frozen instance starts at 0/0, which is equal, and equal is what the
+    hidden half looks for. Reading the subjects back is what makes the setup a
+    step that can fail rather than one that is assumed.
+    """
+    for name, expected in (("gcode_position_z", gcode), ("position_z", actual)):
+        got = app.get(name).get("value")
+        assert got == expected, (
+            f"{size}: {name} reads {got!r}, expected {expected} - the write did "
+            f"not land, so what follows measures a state nobody established")
+
+
+def _wait_act_text(app: HelixApp, expected: str | None,
+                   timeout: float = 15.0) -> str | None:
+    """Poll the Act value until it reads `expected`, then report what it reads.
+
+    wait_idle() is best-effort and does not see raw lv_async_call work, so on a
+    slow machine the row can still be pending when it returns. The caller's
+    assert is the real check - this only stops a fast reader from failing it
+    prematurely.
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and _act_text(app) != expected:
+        time.sleep(0.25)
+    return _act_text(app)
+
+
 @pytest.fixture
 def motion_app(request, tmp_path):
     """An instance at a given size, on the motion overlay, frozen for measurement.
 
-    freeze() stops the mock's 250 ms status pushes from re-equalising the Z
-    subjects mid-measurement; manual `set` still propagates while frozen
-    (same trick as the AMS loading-error modal fixture in test_modal_geometry).
+    freeze() parks the mock's simulation thread as well as LVGL's timers, so no
+    status push re-equalises the Z subjects mid-measurement; manual `set` still
+    propagates while frozen (same trick as the AMS loading-error modal fixture
+    in test_modal_geometry).
     """
     size = request.param
     if not _BINARY.exists():
@@ -101,6 +138,14 @@ def motion_app(request, tmp_path):
             try:
                 yield app, size
             finally:
+                # This fixture builds its own HelixApp, so the `artifacts`
+                # fixture cannot resolve it and writes nothing. Dump here
+                # instead, before unfreeze, so a failure is inspected in the
+                # state it failed in.
+                if any(getattr(request.node, f"rep_{phase}", None) is not None
+                       and getattr(request.node, f"rep_{phase}").failed
+                       for phase in ("setup", "call")):
+                    dump_failure_diagnostics(app, ARTIFACT_ROOT / request.node.name)
                 app.unfreeze()
     finally:
         if before is None:
@@ -113,23 +158,54 @@ def motion_app(request, tmp_path):
 def test_act_row_does_not_shift_stable_geometry(motion_app):
     app, size = motion_app
 
-    # Equal Z: the Act row is hidden.
+    # Diverged Z first, so the hidden half below asserts a transition rather
+    # than a starting condition: a frozen instance already sits at equal Z, and
+    # "row is hidden" there is true whether or not anything this test did took
+    # effect.
     app.set("gcode_position_z", _Z_EQUAL)
-    app.set("position_z", _Z_EQUAL)
-    app.wait_idle()
-    assert _act_text(app) is None, (
-        f"{size}: Act row visible with equal Z - setup never reached the hidden state")
-
-    hidden = {name: _geom(app, name) for name in ("jog_pad", "position_card", "pos_z")}
-
-    # Diverged Z: the Act row appears. Assert the state BEFORE the geometry:
-    # these tests assert nothing if the row never showed.
     app.set("position_z", _Z_DIVERGED)
     app.wait_idle()
-    assert _act_text(app) == "3.00 mm", (
-        f"{size}: Act row did not appear on divergence")
+    _assert_z_subjects(app, size, gcode=_Z_EQUAL, actual=_Z_DIVERGED)
+    # Report the value, not just the expectation: None means the row is hidden or
+    # absent, anything else means it rendered and the text is wrong. A bare
+    # message cannot tell those apart, and a custom message suppresses pytest's
+    # own comparison output.
+    actual = _wait_act_text(app, "3.00 mm")
+    assert actual == "3.00 mm", (
+        f"{size}: Act row text is {actual!r}, expected '3.00 mm' "
+        f"(None = row hidden or absent)")
+    # The Act row alone cannot tell "both sets landed" from "only the toolhead
+    # one did" - 0.00 vs 3.00 diverges too. The commanded row reads the other
+    # subject, so it is what pins the divergence to the one set up here.
+    commanded = app.text("pos_z")
+    assert commanded == "2.50 mm", (
+        f"{size}: commanded Z row reads {commanded!r}, expected '2.50 mm' - the "
+        f"gcode_position_z write did not land, so the divergence under test is "
+        f"not the one this test set up")
+
+    # The row has to still be there when the geometry below is read, or the
+    # measurement describes an undefined state. A mock status push carries a
+    # full position snapshot with gcode Z and toolhead Z equal, which re-hides
+    # the row; outlasting one push interval is what says the frozen state holds.
+    time.sleep(_MOCK_PUSH_INTERVAL_S * 1.5)
+    held = _act_text(app)
+    assert held == "3.00 mm", (
+        f"{size}: Act row read {held!r} after {_MOCK_PUSH_INTERVAL_S * 1.5:.1f}s frozen, "
+        f"expected it to still say '3.00 mm' - the printer state moved under a "
+        f"frozen instance, so the geometry below would measure nothing definite")
 
     shown = {name: _geom(app, name) for name in ("jog_pad", "position_card", "pos_z")}
+
+    # Equal Z: the row goes away again. The read above is what makes this mean
+    # something - the row was demonstrably there a moment ago.
+    app.set("position_z", _Z_EQUAL)
+    app.wait_idle()
+    _assert_z_subjects(app, size, gcode=_Z_EQUAL, actual=_Z_EQUAL)
+    gone = _wait_act_text(app, None)
+    assert gone is None, (
+        f"{size}: Act row reads {gone!r} with equal Z, expected it hidden")
+
+    hidden = {name: _geom(app, name) for name in ("jog_pad", "position_card", "pos_z")}
 
     for name in ("jog_pad", "position_card", "pos_z"):
         before, after = hidden[name], shown[name]

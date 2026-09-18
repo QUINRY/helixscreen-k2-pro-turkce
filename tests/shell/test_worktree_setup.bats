@@ -5,12 +5,15 @@
 #
 # The script symlinks each lib/ submodule into the main tree so a worktree
 # builds in seconds instead of recompiling ~GB of submodules. That is right for
-# the third-party ones, which we never edit (changes go through patches/), and
-# wrong for lib/helix-xml, which is ours and is edited directly: a symlink makes
-# every worktree edit land in the MAIN tree's submodule working copy, shared
-# with every other worktree and visible as dirt in main's `git status`.
+# the submodules nothing rewrites, and wrong for the three that are rewritten
+# per branch: lib/helix-xml is ours and is edited directly, and lib/lvgl and
+# lib/libhv are rewritten by patches/, which is per-branch. Sharing one checkout
+# between branches that disagree about either is unsatisfiable — each tree's
+# correct action invalidates the other's — so those three get a private checkout
+# per worktree.
 
 setup() {
+    load helpers
     cd "$BATS_TEST_DIRNAME/../.." || return 1
     SCRIPT="scripts/setup-worktree.sh"
 }
@@ -19,6 +22,22 @@ setup() {
     run grep -E '^LIB_PRIVATE_SUBMODULES=' "$SCRIPT"
     [ "$status" -eq 0 ]
     [[ "$output" == *'lib/helix-xml'* ]]
+}
+
+@test "every submodule patches/ rewrites gets a private checkout" {
+    # A patched submodule left symlinked is the whole defect: patches/ is
+    # per-branch and the checkout would not be, so one tree's reapply-patches
+    # silently redefines what every other tree compiles.
+    patched=$(grep -oE '^(LVGL|LIBHV)_PATCHED_FILES' mk/patches.mk | sort -u)
+    [ -n "$patched" ] || return 1
+    private=$(grep -E '^LIB_PRIVATE_SUBMODULES=' "$SCRIPT")
+    for p in $patched; do
+        case "$p" in
+            LVGL_PATCHED_FILES) path="lib/lvgl" ;;
+            LIBHV_PATCHED_FILES) path="lib/libhv" ;;
+        esac
+        [[ "$private" == *"$path"* ]] || { echo "patched but shared: $path" >&2; return 1; }
+    done
 }
 
 @test "the symlink loop skips private submodules" {
@@ -79,6 +98,143 @@ setup() {
     [ "$output" -ge 1 ]
 }
 
+# --- the private checkout, end to end -----------------------------------------
+#
+# Everything above reads the script's text. These build a miniature repo with one
+# submodule named lib/lvgl — a name LIB_PRIVATE_SUBMODULES covers — run the real
+# script over it, and assert on what lands on disk.
+
+# Builds $1/upstream (two commits) and $1/main (a repo with it at lib/lvgl),
+# with just enough of the tree for the script to run. Echoes nothing; the caller
+# uses $1/main.
+build_fixture_repo() {
+    local root="$1"
+    git init -q "$root/upstream"
+    git -C "$root/upstream" config user.email "t@example.invalid"
+    git -C "$root/upstream" config user.name "t"
+    mkdir -p "$root/upstream/src"
+    echo "int v = 1;" > "$root/upstream/src/lv_thing.c"
+    git -C "$root/upstream" add src/lv_thing.c
+    git -C "$root/upstream" commit -qm first
+    echo "int v = 2;" > "$root/upstream/src/lv_thing.c"
+    git -C "$root/upstream" add src/lv_thing.c
+    git -C "$root/upstream" commit -qm second
+
+    git init -q "$root/main"
+    git -C "$root/main" config user.email "t@example.invalid"
+    git -C "$root/main" config user.name "t"
+    mkdir -p "$root/main/scripts" "$root/main/patches" "$root/main/mk"
+    cp scripts/setup-worktree.sh "$root/main/scripts/"
+    cp scripts/sync-worktree-mtimes.py "$root/main/scripts/"
+    : > "$root/main/patches/.keep"
+    # git refuses a file:// submodule unless the transport is allowed on the
+    # command line; the repo-config form is not consulted for the inner clone.
+    git -C "$root/main" -c protocol.file.allow=always submodule add -q "$root/upstream" lib/lvgl
+    git -C "$root/main" add scripts patches .gitmodules lib/lvgl
+    git -C "$root/main" commit -qm init
+}
+
+@test "a private submodule is a real checkout with its own git dir" {
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"   # never touch the real one
+    build_fixture_repo "$tmp"
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/iso
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+
+    wt="$tmp/main/.worktrees/iso"
+    [ ! -L "$wt/lib/lvgl" ] || { echo "still a symlink" >&2; return 1; }
+    [ -d "$wt/lib/lvgl" ] || return 1
+    # The git dir must be this worktree's own. Inheriting the main tree's is the
+    # sharing the private checkout exists to remove.
+    run cat "$wt/lib/lvgl/.git"
+    [[ "$output" == *"worktrees/iso/modules/"*"lvgl" ]] || { echo "$output" >&2; return 1; }
+    rm -rf "$tmp"
+}
+
+@test "patching a private submodule leaves the main tree's copy alone" {
+    # The property the whole change exists to create.
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/iso
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+
+    wt="$tmp/main/.worktrees/iso"
+    echo "int v = 99;" > "$wt/lib/lvgl/src/lv_thing.c"
+    run cat "$tmp/main/lib/lvgl/src/lv_thing.c"
+    [ "$output" = "int v = 2;" ] || { echo "main tree was rewritten: $output" >&2; return 1; }
+
+    # And the reverse: the main tree cannot rewrite the worktree's.
+    echo "int v = 7;" > "$tmp/main/lib/lvgl/src/lv_thing.c"
+    run cat "$wt/lib/lvgl/src/lv_thing.c"
+    [ "$output" = "int v = 99;" ] || { echo "worktree was rewritten: $output" >&2; return 1; }
+    rm -rf "$tmp"
+}
+
+@test "a private submodule is not marked skip-worktree, before or after migration" {
+    # skip-worktree hides the symlink typechange for the shared submodules. On a
+    # private checkout there is no typechange to hide, and the mark would instead
+    # hide a real change of pinned revision from `git status`, `git add` and the
+    # revision check — the one thing that has to stay visible.
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/iso
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+
+    wt="$tmp/main/.worktrees/iso"
+    run git -C "$wt" ls-files -v lib/lvgl
+    [[ "$output" != S* ]] || { echo "marked skip-worktree: $output" >&2; return 1; }
+
+    # A worktree set up before the submodule became private carries the mark
+    # already; re-running has to clear it, not leave it.
+    git -C "$wt" update-index --skip-worktree lib/lvgl
+    run bash "$tmp/main/scripts/setup-worktree.sh" --setup-only --no-build feat/iso
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+    run git -C "$wt" ls-files -v lib/lvgl
+    [[ "$output" != S* ]] || { echo "mark not cleared: $output" >&2; return 1; }
+    rm -rf "$tmp"
+}
+
+@test "an interrupted materialization is redone rather than left broken" {
+    # The state an interrupted init leaves: a git dir with a gutted checkout
+    # beside it. It does not self-heal, and the symptom is a build error naming
+    # a missing object file, which points nowhere near submodules.
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/iso
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+
+    wt="$tmp/main/.worktrees/iso"
+    rm -rf "$wt/lib/lvgl/src"
+    [ ! -f "$wt/lib/lvgl/src/lv_thing.c" ] || return 1
+
+    run bash "$tmp/main/scripts/setup-worktree.sh" --setup-only --no-build feat/iso
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+    [ -f "$wt/lib/lvgl/src/lv_thing.c" ] || { echo "not recovered" >&2; return 1; }
+    rm -rf "$tmp"
+}
+
+@test "setup fails loudly when a private submodule is not at the pinned revision" {
+    # A submodule at the wrong revision compiles, links, and is not the code the
+    # branch describes. Nothing downstream reports it, so setup has to.
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/iso
+    [ "$status" -eq 0 ] || { echo "$output" >&2; return 1; }
+
+    wt="$tmp/main/.worktrees/iso"
+    first=$(git -C "$tmp/upstream" rev-list --max-parents=0 HEAD)
+    git -C "$wt/lib/lvgl" checkout -q --detach "$first"
+
+    run bash "$tmp/main/scripts/setup-worktree.sh" --setup-only --no-build feat/iso
+    [ "$status" -ne 0 ] || { echo "accepted a wrong revision" >&2; echo "$output" >&2; return 1; }
+    [[ "$output" == *"this branch pins"* ]] || { echo "$output" >&2; return 1; }
+    rm -rf "$tmp"
+}
+
 @test "refuses to set up a worktree on top of the main tree, and destroys nothing" {
     tmp="$(mktemp -d)"
     git -C "$tmp" init -q
@@ -101,4 +257,75 @@ setup() {
     [ -f "$tmp/lib/keepme/file.txt" ]
     [ "$(cat "$tmp/lib/keepme/file.txt")" = "precious" ]
     rm -rf "$tmp"
+}
+
+# The compile database is inherited from the main tree and describes ITS branch.
+# A source that exists there and not on the worktree's branch arrives as an entry
+# naming a file that is not here, and quality-checks.sh hands every entry to
+# clang++ — so the pre-push hook rejects a push over files the branch never had.
+# Both halves have to be pruned: the build reassembles the JSON from the .ccj
+# fragments, so cleaning only the JSON lets the next build restore the phantoms.
+
+@test "a compile_commands entry for a file absent on this branch is dropped" {
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+
+    # main-tree database naming one real source and one that only exists there
+    cat > "$tmp/main/compile_commands.json" <<JSON
+[
+  {"directory": "$tmp/main", "file": "$tmp/main/scripts/setup-worktree.sh", "command": "cc -c real"},
+  {"directory": "$tmp/main", "file": "$tmp/main/src/only_on_main.c", "command": "cc -c src/only_on_main.c"}
+]
+JSON
+
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/ccj
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+
+    wt="$tmp/main/.worktrees/ccj"
+    [ -f "$wt/compile_commands.json" ] || fail "no compile_commands.json produced"
+
+    # The absent source must be gone; the present one must survive, or the
+    # filter is just deleting the database.
+    run grep -c "only_on_main.c" "$wt/compile_commands.json"
+    [ "$output" = "0" ] || fail "phantom entry survived: $(cat "$wt/compile_commands.json")"
+    grep -q "setup-worktree.sh" "$wt/compile_commands.json" \
+        || fail "real entry was dropped too: $(cat "$wt/compile_commands.json")"
+}
+
+@test "a .ccj fragment for a file absent on this branch is dropped" {
+    tmp="$(mktemp -d)"
+    export CCACHE_CONFIGPATH="$tmp/ccache.conf"
+    build_fixture_repo "$tmp"
+
+    mkdir -p "$tmp/main/build/obj"
+    printf '{"directory":"%s","file":"%s/scripts/setup-worktree.sh","command":"cc"}\n' \
+        "$tmp/main" "$tmp/main" > "$tmp/main/build/obj/mainpath.ccj"
+    printf '{"directory":"%s","file":"%s/src/only_on_main.c","command":"cc"}\n' \
+        "$tmp/main" "$tmp/main" > "$tmp/main/build/obj/phantom.ccj"
+
+    run bash "$tmp/main/scripts/setup-worktree.sh" --base HEAD --no-build feat/frag
+    [ "$status" -eq 0 ] || fail "setup failed: $output"
+
+    wt="$tmp/main/.worktrees/frag"
+    # Prove the clone and the prune both actually ran. Without this the two
+    # assertions below pass on files that were never copied in the first place.
+    [ -d "$wt/build/obj" ] || fail "build/obj was never cloned: $output"
+    echo "$output" | grep -q "pruned" \
+        || fail "prune step never reported: $output"
+
+    # A fragment for a source this branch lacks is dropped, or the next build
+    # reassembles the database with it and the gate fails again.
+    [ ! -f "$wt/build/obj/phantom.ccj" ] \
+        || fail "phantom fragment survived; the next build would restore it"
+
+    # One whose source DOES exist here is kept and repointed at this worktree —
+    # dropping it would throw away the cloned-object benefit, and leaving the
+    # main-tree path would put another tree's source in this database.
+    [ -f "$wt/build/obj/mainpath.ccj" ] \
+        || fail "a usable fragment was pruned; clangd would start empty"
+    # Assert on the shape, not the absolute prefix: /var and /private/var name
+    # the same directory on macOS and either spelling can appear.
+    grep -q "\.worktrees/frag/scripts/setup-worktree\.sh" "$wt/build/obj/mainpath.ccj" \
+        || fail "fragment was not repointed: $(cat "$wt/build/obj/mainpath.ccj")"
 }

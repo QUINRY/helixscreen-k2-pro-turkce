@@ -388,6 +388,18 @@ void NetworkSettingsOverlay::on_activate() {
     update_ethernet_status();
     update_any_network_connected();
 
+    // Subscribe to backend state changes so an open overlay refreshes its
+    // transport rows when the backend flips transports underneath it: on a
+    // single-transport platform (netd enforces this) a join or leave downs
+    // and re-ups the OTHER transport too, and nothing here re-queries it
+    // until the user taps something (prestonbrown/helixscreen#1398).
+    // Registered per activation — on_deactivate() invalidates lifetime_, so
+    // a create()-time token would die at the first close and never return.
+    if (wifi_manager_) {
+        wifi_manager_->add_state_observer(lifetime_.token(),
+                                          [this]() { refresh_transport_status(); });
+    }
+
     // Update band capability indicator (show "Only 2.4GHz" if 5GHz not supported)
     if (wifi_manager_) {
         bool only_24ghz = !wifi_manager_->supports_5ghz();
@@ -478,6 +490,12 @@ void NetworkSettingsOverlay::cleanup() {
 // Helper Functions
 // ============================================================================
 
+void NetworkSettingsOverlay::refresh_transport_status() {
+    update_wifi_status();
+    update_ethernet_status();
+    update_any_network_connected();
+}
+
 void NetworkSettingsOverlay::update_wifi_status() {
     if (!wifi_manager_) {
         spdlog::debug("[NetworkSettingsOverlay] Cannot update WiFi status: no WiFiManager");
@@ -525,6 +543,16 @@ void NetworkSettingsOverlay::update_ethernet_status() {
         return;
     }
 
+    // Coalesce: each state-observer tick while a probe is already in flight
+    // just marks one trailing refresh — a flapping link or a failed-join
+    // retry burst must not queue N sequential daemon round trips on the
+    // shared fast lane (and mid-join the daemon is one-op-at-a-time anyway).
+    if (eth_refresh_in_flight_) {
+        eth_refresh_trailing_ = true;
+        return;
+    }
+    eth_refresh_in_flight_ = true;
+
     // Kick off an async probe — the callback fires on the UI thread via
     // tok.defer() so it's safe to touch subjects there. No bare expired()
     // check on the bg thread: defer's own guard skips when the owner is
@@ -538,6 +566,14 @@ void NetworkSettingsOverlay::update_ethernet_status() {
 }
 
 void NetworkSettingsOverlay::apply_ethernet_status(const EthernetInfo& info) {
+    eth_refresh_in_flight_ = false;
+    if (eth_refresh_trailing_) {
+        // A refresh was requested while this probe ran — run it now that the
+        // lane is free (this pass's data is about to be superseded anyway).
+        eth_refresh_trailing_ = false;
+        update_ethernet_status();
+    }
+
     lv_subject_set_int(&eth_connected_, info.connected ? 1 : 0);
 
     if (info.connected) {
@@ -1309,8 +1345,7 @@ void NetworkSettingsOverlay::handle_hidden_connect_clicked() {
                     spdlog::info("[NetworkSettingsOverlay] Connected to hidden network: {}",
                                  helix::redact::ssid(ssid_str));
                     handle_hidden_cancel_clicked();
-                    update_wifi_status();
-                    update_any_network_connected();
+                    refresh_transport_status();
 
                     if (wifi_manager_) {
                         auto scan_token = lifetime_.token();
@@ -1394,8 +1429,7 @@ void NetworkSettingsOverlay::handle_network_item_clicked(lv_event_t* e) {
                     if (success) {
                         spdlog::info("[NetworkSettingsOverlay] Connected to {}",
                                      helix::redact::ssid(current_ssid_));
-                        update_wifi_status();
-                        update_any_network_connected();
+                        refresh_transport_status();
                     } else {
                         spdlog::error("[NetworkSettingsOverlay] Failed to connect: {}", error);
                     }
@@ -1455,8 +1489,7 @@ void NetworkSettingsOverlay::handle_network_forget_confirm() {
                              helix::redact::ssid(ssid));
                 ToastManager::instance().show(ToastSeverity::SUCCESS, lv_tr("Network forgotten"),
                                               2000);
-                update_wifi_status();
-                update_any_network_connected();
+                refresh_transport_status();
 
                 // Refresh the scan list so a stale "connected" checkmark clears.
                 if (wifi_manager_ && wifi_manager_->is_enabled()) {
@@ -1697,8 +1730,7 @@ void NetworkSettingsOverlay::handle_password_connect_clicked() {
             if (success) {
                 spdlog::info("[NetworkSettingsOverlay] Connected to {}", helix::redact::ssid(ssid));
                 hide_password_modal();
-                update_wifi_status();
-                update_any_network_connected();
+                refresh_transport_status();
 
                 // Refresh network list to show checkmark on connected network
                 if (wifi_manager_) {

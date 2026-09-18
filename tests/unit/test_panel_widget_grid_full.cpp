@@ -28,6 +28,7 @@
 #include "../test_fixtures.h"
 #include "../ui_test_utils.h"
 #include "config.h"
+#include "connection_state.h"
 #include "grid_layout.h"
 #include "helix-xml/src/xml/lv_xml.h"
 #include "helix-xml/src/xml/lv_xml_component.h"
@@ -36,6 +37,7 @@
 #include "panel_widget_config.h"
 #include "panel_widget_manager.h"
 #include "panel_widget_registry.h"
+#include "printer_state.h"
 #include "theme_manager.h"
 
 #include <algorithm>
@@ -126,6 +128,43 @@ void register_spy_component() {
     lv_xml_register_component_from_data(
         "panel_widget_firmware_restart",
         "<component><view extends=\"lv_obj\" width=\"100%\" height=\"100%\"/></component>");
+}
+
+/// The grid cell a widget actually landed in. populate_widgets() names every
+/// tile with its config id (lv_obj_set_name) and places it with
+/// lv_obj_set_grid_cell, so this reads back the real placement rather than
+/// inferring it. Asserting on "did it get attached" cannot see this bug: an
+/// anchored widget and an auto-placed one are both attached, just in different
+/// cells at different spans.
+struct PlacedCell {
+    int col = -1, row = -1, colspan = -1, rowspan = -1;
+    bool found = false;
+    bool operator==(const PlacedCell& o) const {
+        return found && o.found && col == o.col && row == o.row && colspan == o.colspan &&
+               rowspan == o.rowspan;
+    }
+};
+
+PlacedCell placed_cell(lv_obj_t* container, const char* widget_id) {
+    PlacedCell out;
+    if (!container) {
+        return out;
+    }
+    uint32_t n = lv_obj_get_child_count(container);
+    for (uint32_t i = 0; i < n; ++i) {
+        lv_obj_t* child = lv_obj_get_child(container, i);
+        const char* nm = child ? lv_obj_get_name(child) : nullptr;
+        if (!nm || std::string(nm) != widget_id) {
+            continue;
+        }
+        out.col = static_cast<int>(lv_obj_get_style_grid_cell_column_pos(child, LV_PART_MAIN));
+        out.row = static_cast<int>(lv_obj_get_style_grid_cell_row_pos(child, LV_PART_MAIN));
+        out.colspan = static_cast<int>(lv_obj_get_style_grid_cell_column_span(child, LV_PART_MAIN));
+        out.rowspan = static_cast<int>(lv_obj_get_style_grid_cell_row_span(child, LV_PART_MAIN));
+        out.found = true;
+        return out;
+    }
+    return out;
 }
 
 /// Two-page layout whose page 1 (a secondary page — no registry-default append)
@@ -256,7 +295,12 @@ class GridFullFixture : public XMLTestFixture {
         process_lvgl(10);
         auto widgets = mgr.populate_widgets(panel_id, container, /*page_index=*/1);
         (void)widgets;
+        last_container = container; // for placed_cell() — see #1414
     }
+
+    /// The container the most recent relaunch() laid out, so a test can read
+    /// back where widgets actually landed rather than only whether they exist.
+    lv_obj_t* last_container = nullptr;
 };
 
 // The reported symptom: a widget that has NEVER held a grid cell must not be

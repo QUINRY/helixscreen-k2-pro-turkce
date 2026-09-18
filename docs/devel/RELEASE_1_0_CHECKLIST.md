@@ -87,8 +87,28 @@ live. See `ANDROID_PLAY_STORE.md`.
       21:46), and the Nightly Full Test Suite passed 2026-08-15 04:28 -
       including the `test_recovery_dialog_threading.cpp` SIGSEGV that had been
       unreproduced. Watch whether it recurs rather than treating it as fixed.
-- [ ] `VERSION.txt`: `0.99.113` → `1.0.0`. Every existing install is on `0.99.x`,
-      so this is an ordinary forward step for the updater — no special handling.
+- [x] `VERSION.txt`: `0.99.118` → `1.0.0`, and the changelog heading with it.
+      Every existing install is on `0.99.x`, so this is an ordinary forward step
+      for the updater — no special handling. **Tag plain `v1.0.0`**: this branch
+      declares `RELEASE_CHANNEL=stable` and `release-channel.sh` refuses a
+      prerelease-suffixed tag there, because `helix::version::Version` discards
+      the suffix and `v1.0.0-rc.1` would compare equal to `v1.0.0`.
+- [x] **The Android build loads and works.** Build the APK (`android/`, gradle)
+      and confirm on a device or emulator that it starts, reaches the dashboard,
+      and connects to a printer — the desktop and device builds passing says
+      nothing about it, since it is the one target with its own toolchain and
+      packaging. **Verified 2026-09-09 on a Galaxy Z Flip 7 (SM-F766U1, Android
+      16, arm64-v8a):** `assembleRelease` APK, uninstall-then-install so first
+      run was genuine, wizard connected to the AD5M Pro at 192.168.1.67, and the
+      dashboard came up with live nozzle/bed temperatures, fan percentages and
+      filament state.
+- [x] The Play Store "What's new" text is written. `scripts/generate-whatsnew.sh`
+      renders it from the changelog's `<!-- whatsnew -->` block and **refuses a
+      block over 500 characters**, so an over-long block means the release ships
+      with no Play changelog at all. Run the script and read its byte count.
+      **412 bytes, under the limit**, at
+      `android/fastlane/metadata/android/en-US/changelogs/1000000.txt`
+      (versionCode 1000000 confirmed by `scripts/android-version-code.sh`).
 - [x] Confirm the `ALLOW_CHANNEL_DOWNGRADE` repository variable is **unset**. It
       is the escape hatch for the downgrade guard and must be off by default.
       *Verified 2026-08-14 (`gh variable list`): not set.*
@@ -97,7 +117,7 @@ live. See `ANDROID_PLAY_STORE.md`.
 
       The pre-v0.99.31 count this item was written around is still tiny (3–5 of
       549, ~0.5–0.9%, none meaningfully self-updating) — but it was never the
-      real gate. `scripts/generate-manifest.sh:36` sets
+      real gate. `scripts/generate-manifest.sh` sets
       `ZIP_EXCLUDE_PLATFORMS="ad5m ad5x cc1 k1 k2 snapmaker-u1"`, six platforms
       deliberately served tar.gz as their **only** manifest asset because
       pre-v0.99.102 updaters verify with `unzip -tqq` and BusyBox lacks `unzip -t`
@@ -157,20 +177,24 @@ being a 7-tap easter egg. No action needed.
 
 ---
 
-## 4. Before unhiding the channel dropdown
+## 4. Unhiding the channel dropdown
 
-Tracked as #1236 ("Beta: Update Channel dropdown — finish or drop", 1.1 milestone).
-Do this *after* both tracks are confirmed publishing.
+Tracked as #1236 ("Beta: Update Channel dropdown — finish or drop", 1.0 milestone).
 
-- [ ] Remove the `show_beta_features` gate on `container_update_channel` in
-      `about_settings_overlay.xml` (currently a 7-tap easter egg on the version row).
+- [x] Split the picker in two in `about_settings_overlay.xml`, since a dropdown's
+      `options` is a static string: `container_update_channel` offers Stable/Beta on
+      any install and `container_update_channel_dev` adds Dev under
+      `show_beta_features`. Both stay gated on `show_update_settings`.
       Edit `ui_xml/` only — `android/app/src/main/assets/ui_xml/` is a Gradle build
       output that `copyAssets` wipes and re-copies on every build, so an edit there
       is erased. See `docs/devel/ANDROID_ASSETS.md`.
-- [ ] Rename the options for a two-track UX: **Stable / Devel**, keeping **Dev**
-      behind the beta gate. Dev is still rejected outright without
-      `/update/dev_url`, which is fine for a hidden developer option and wrong for
-      a user-facing one.
+- [x] Keep **Dev** behind the beta gate. It is rejected outright without
+      `/update/dev_url`, which is fine for a hidden developer option and wrong for a
+      user-facing one. `main` also declares `beta`, which `scripts/release-channel.sh`
+      maps to "beta dev", so the beta and dev channels carry identical builds and a
+      third user-facing entry would duplicate its neighbour.
+      `UpdateChecker::get_channel()` gates only Dev to match, so a stored Beta is
+      honoured without the unlock while a stored Dev falls back to Stable.
 - [ ] Translate the three downgrade strings — currently English placeholders in all
       8 non-English locales: `"Switch to v%s"`, `"Install Older Version?"`, and the
       confirmation body `"This channel offers v{}, older than the installed v{}…"`.
@@ -203,13 +227,13 @@ while running 0.99.111):
       depth. Mutation-verified.
 
       **Four migrations are NOT idempotent**, and are pinned as current behavior
-      rather than fixed: `config.cpp:463` and `:505` (brightness 50→80, below
+      rather than fixed: `src/system/config.cpp#migrate_v6_to_v7` and `:505` (brightness 50→80, below
       v7/v9), `:474` (toolhead_style 2→5/3→2, a rotation — below v8), `:841`
       (writes `recheck_pending` unconditionally, below v18; the flag can
       invalidate a captured touch calibration at boot via
       `should_invalidate_legacy_calibration`). The jitter 15→5 retune that used to
       make a fifth is gone: `migrate_v2_to_v3` is an empty step now
-      (`src/system/config.cpp:366`), kept only so a v2 config still walks the
+      (`src/system/config.cpp#migrate_v2_to_v3`), kept only so a v2 config still walks the
       version chain, because `/input/jitter_threshold` never reached the input
       pipeline and was removed (#1358).
 

@@ -124,6 +124,7 @@
   <translation tag="Acceleration to deceleration limit (mm/s²)" tr="Yavaşlama sınırına kadar hızlanma (mm/s²)"/>
   <translation tag="Accelerometer" tr="İvmeölçer"/>
   <translation tag="Accelerometer communication failed. Try again." tr="İvmeölçer iletişimi başarısız oldu. Tekrar deneyin."/>
+  <translation tag="Accelerometers" tr="İvmeölçerler"/>
   <translation tag="Accept" tr="Kabul Et"/>
   <translation tag="Accepted Z Position: 0.000" tr="Kabul edilen Z Konumu: 0,000"/>
   <translation tag="Accepted Z Position: {:.3f}" tr="Kabul edilen Z Konumu: {:.3f}"/>
@@ -207,6 +208,7 @@
   <translation tag="Auto" tr="Otomatik"/>
   <translation tag="Auto Bed Mesh" tr="Otomatik Tabla Ağı"/>
   <translation tag="Auto Cal" tr="Otomatik Kal."/>
+  <translation tag="Auto Fans" tr="Otomatik Fanlar"/>
   <translation tag="Auto-Detect" tr="Otomatik Algılama"/>
   <translation tag="Auto-Heat on Load" tr="Yükte Otomatik Isıtma"/>
   <translation tag="Auto-detect" tr="Otomatik algılama"/>
@@ -214,7 +216,7 @@
   <translation tag="Auto-lock" tr="Otomatik kilitleme"/>
   <translation tag="Auto-poll for weight updates" tr="Ağırlık güncellemelerini otomatik sorgula"/>
   <translation tag="Auto-probe or manually check screw heights" tr="Vida yüksekliklerini otomatik olarak problayın veya manuel olarak kontrol edin"/>
-  <translation tag="Auto-refill is on but no two lanes hold matching filament, so nothing will switch on runout" tr="Otomatik doldurma açık ancak eşleşen filament taşıyan iki kanal yok; bu nedenle filament bittiğinde otomatik geçiş yapılmayacak"/>
+  <translation tag="Auto-refill is on but no two slots hold matching filament, so nothing will switch on runout" tr="Otomatik doldurma açık, ancak eşleşen filament içeren iki yuva yok. Filament bittiğinde geçiş yapılmayacak"/>
   <translation tag="Auto-render video" tr="Videoyu otomatik oluştur"/>
   <translation tag="Auto-tuning Shapers..." tr="Otomatik Ayarlama Şekillendiriciler..."/>
   <translation tag="Auto-uninstall only works on local Moonraker" tr="Otomatik kaldırma yalnızca yerel Moonraker cihazlarda çalışır"/>
@@ -320,7 +322,7 @@
   <translation tag="Bypass disabled" tr="Baypas devre dışı"/>
   <translation tag="Bypass enabled" tr="Baypas etkin"/>
   <translation tag="Bypass failed" tr="Baypas başarısız oldu"/>
-  <translation tag="Bypass is active, but this print uses AMS lanes. The printer may refuse to load a lane while bypass filament is in the toolhead. Remove the filament and turn bypass off before printing. Start anyway?" tr="Baypas etkin, ancak bu yazdırma AMS kanal kullanıyor. Yazıcı, bypass filamenti baskı kafasındayken kanal yüklemeyi reddedebilir. Yazdırmadan önce filamenti çıkarın ve bypass&apos;ı kapatın. Yine de başla?"/>
+  <translation tag="Bypass is active, but this print uses AMS slots. The printer may refuse to load a slot while bypass filament is in the toolhead. Remove the filament and turn bypass off before printing. Start anyway?" tr="Baypas etkin, ancak bu baskı AMS yuvalarını kullanıyor. Baskı kafasında baypas filamenti varken yazıcı yuvadan filament yüklemeyi reddedebilir. Baskıdan önce filamenti çıkarıp baypası kapatın. Yine de başlatılsın mı?"/>
   <translation tag="Bypass toggle failed" tr="Baypas geçişi başarısız oldu"/>
   <translation tag="C" tr="C"/>
   <translation tag="CALIBRATION" tr="KALİBRASYON"/>
@@ -366,7 +368,6 @@
   <translation tag="Calibration may still be running — response timed out" tr="Kalibrasyon hala çalışıyor olabilir; yanıt zaman aşımına uğradı"/>
   <translation tag="Calibration move may still be running — response timed out" tr="Kalibrasyon hareketi hala çalışıyor olabilir; yanıt zaman aşımına uğradı"/>
   <translation tag="Calibration saved but cannot apply on SDL display" tr="Kalibrasyon kaydedildi ancak SDL ekranına uygulanamıyor"/>
-  <translation tag="Calibration started" tr="Kalibrasyon başladı"/>
   <translation tag="Calibration succeeded, but the frequency chart data couldn&apos;t be read." tr="Kalibrasyon başarılı oldu ancak frekans tablosu verileri okunamadı."/>
   <translation tag="Calibration succeeded. The frequency chart is only available when HelixScreen runs on the printer." tr="Kalibrasyon başarılı oldu. Frekans tablosu yalnızca yazıcıda HelixScreen çalıştırıldığında kullanılabilir."/>
   <translation tag="Calibration timed out. Please try again." tr="Kalibrasyon zaman aşımına uğradı. Lütfen tekrar deneyin."/>
@@ -447,6 +448,7 @@
   <translation tag="Checking..." tr="Kontrol ediliyor..."/>
   <translation tag="Choose 12-hour or 24-hour time display" tr="12 saatlik veya 24 saatlik zaman gösterimini seçin"/>
   <translation tag="Choose Filament" tr="Filamenti seçin"/>
+  <translation tag="Choose Model" tr="Model Seç"/>
   <translation tag="Choose an existing filament, or tap + New to create one." tr="Mevcut bir filament seçin veya oluşturmak için + Yeni&apos;ye dokunun."/>
   <translation tag="Choose display language" tr="Görüntüleme dilini seçin"/>
   <translation tag="Choose how frames are captured during printing" tr="Yazdırma sırasında karelerin nasıl yakalanacağını seçin"/>
@@ -483,6 +485,7 @@
   <translation tag="Collecting debug info..." tr="Hata ayıklama bilgileri toplanıyor..."/>
   <translation tag="Color" tr="Renk"/>
   <translation tag="Color Mismatch" tr="Renk Uyuşmazlığı"/>
+  <translation tag="Color Sensors" tr="Renk Sensörleri"/>
   <translation tag="Communication Test" tr="İletişim Testi"/>
   <translation tag="Compact" tr="Kompakt"/>
   <translation tag="Comparison" tr="Karşılaştırma"/>
@@ -561,6 +564,7 @@
   <translation tag="Continue" tr="Devam Et"/>
   <translation tag="Control optional print start features" tr="İsteğe bağlı yazdırma başlatma özelliklerini kontrol edin"/>
   <translation tag="Control power relays and smart outlets" tr="Güç rölelerini ve akıllı prizleri kontrol edin"/>
+  <translation tag="Controllable Fans" tr="Kontrol Edilebilir Fanlar"/>
   <translation tag="Controlled by hardware sensor" tr="Donanım sensörü tarafından kontrol edilir"/>
   <translation tag="Controller" tr="Denetleyici"/>
   <translation tag="Controls" tr="Kontroller"/>
@@ -671,6 +675,7 @@
   <translation tag="Dev" tr="Geliştirici"/>
   <translation tag="Dev channel requires dev_url in config" tr="Geliştirici kanalı, yapılandırmada dev_url gerektirir"/>
   <translation tag="Device" tr="Cihaz"/>
+  <translation tag="Device Section" tr="Cihaz Bölümü"/>
   <translation tag="Device connected" tr="Cihaz bağlandı"/>
   <translation tag="Device name" tr="Cihaz adı"/>
   <translation tag="Device name is required" tr="Cihaz adı gerekli"/>
@@ -937,7 +942,6 @@
   <translation tag="Failed to set temperature: {}" tr="Sıcaklık ayarlanamadı: {}"/>
   <translation tag="Failed to set {} temp: {}" tr="{} sıcaklığı ayarlanamadı: {}"/>
   <translation tag="Failed to show confirmation dialog" tr="Onay iletişim kutusu gösterilemedi"/>
-  <translation tag="Failed to start calibration" tr="Kalibrasyon başlatılamadı"/>
   <translation tag="Failed to start installer: " tr="Yükleyici başlatılamadı: "/>
   <translation tag="Failed to start print: {}" tr="Yazdırma başlatılamadı: {}"/>
   <translation tag="Failed to start uninstaller: " tr="Kaldırıcı başlatılamadı: "/>
@@ -1159,6 +1163,7 @@
   <translation tag="Hub &amp; Cutter" tr="Hub ve Kesici"/>
   <translation tag="Hub Bowden Length" tr="Hub Bowden Uzunluğu"/>
   <translation tag="Humidity" tr="Nem"/>
+  <translation tag="Humidity Sensors" tr="Nem Sensörleri"/>
   <translation tag="Hyperlapse" tr="Hiperlaps"/>
   <translation tag="Hyperlapse captures frames at fixed time intervals. Good for very long prints." tr="Hyperlapse, kareleri sabit zaman aralıklarında yakalar. Çok uzun baskılar için uygundur."/>
   <translation tag="ID (optional)" tr="Kimlik (isteğe bağlı)"/>
@@ -1277,7 +1282,6 @@
   <translation tag="Labels Per Sheet" tr="Sayfa Başına Etiket Sayısı"/>
   <translation tag="Lane" tr="Kanal"/>
   <translation tag="Lane tests and motor resets" tr="Kanal testleri ve motor sıfırlamaları"/>
-  <translation tag="Lane {} is blocked — manual intervention required" tr="Kanal {} engellendi — manuel müdahale gerekiyor"/>
   <translation tag="Language" tr="Dil"/>
   <translation tag="Language, theme, brightness, and sound" tr="Dil, tema, parlaklık ve ses"/>
   <translation tag="Last" tr="Son"/>
@@ -1498,6 +1502,7 @@
   <translation tag="Network name cannot be empty" tr="Ağ adı boş olamaz"/>
   <translation tag="Network, display, sound, printer setup, and more. You can replay this tour anytime from Help &amp; About." tr="Ağ, ekran, ses, yazıcı kurulumu ve daha fazlası. Bu turu istediğiniz zaman Yardım ve Hakkında&apos;dan tekrar oynatabilirsiniz."/>
   <translation tag="Never" tr="Asla"/>
+  <translation tag="New Spool" tr="Yeni Makara"/>
   <translation tag="New Spool: Step 1 of 3" tr="Yeni Makara: Adım 1/3"/>
   <translation tag="New Spool: Step {} of {}" tr="Yeni Makara: Adım {} / {}"/>
   <translation tag="New Version Available" tr="Yeni Sürüm Mevcut"/>
@@ -1573,6 +1578,7 @@
   <translation tag="No slot currently matches." tr="Şu anda eşleşen slot yok."/>
   <translation tag="No spool assigned" tr="Atanan makara yok"/>
   <translation tag="No spools found — tap to retry" tr="Makara bulunamadı; yeniden denemek için dokunun"/>
+  <translation tag="No spools match your search" tr="Aramanıza uyan makara yok"/>
   <translation tag="No tape detected in printer" tr="Yazıcıda bant algılanmadı"/>
   <translation tag="No target printer configured" tr="Hiçbir hedef yazıcı yapılandırılmadı"/>
   <translation tag="No temperature sensors detected" tr="Sıcaklık sensörü algılanmadı"/>
@@ -1858,6 +1864,7 @@
   <translation tag="Printer doesn&apos;t expose the expected service — wrong device?" tr="Yazıcı beklenen hizmeti göstermiyor; yanlış cihaz mı?"/>
   <translation tag="Printer hardware detected" tr="Yazıcı donanımı algılandı"/>
   <translation tag="Printer image set to auto-detect" tr="Yazıcı görüntüsü otomatik algılamaya ayarlandı"/>
+  <translation tag="Printer is busy - {} stays in the queue" tr="Yazıcı meşgul - {} sırada kalıyor"/>
   <translation tag="Printer is not paired — pair it first" tr="Yazıcı eşleştirilmemiş; önce onu eşleştirin"/>
   <translation tag="Printer name" tr="Yazıcı adı"/>
   <translation tag="Printer not ready" tr="Yazıcı hazır değil"/>
@@ -1879,6 +1886,7 @@
   <translation tag="Probe Accuracy Failed" tr="Prob Doğruluğu Başarısız"/>
   <translation tag="Probe Accuracy Test" tr="Prob Doğruluğu Testi"/>
   <translation tag="Probe Management" tr="Prob Yönetimi"/>
+  <translation tag="Probe Sensors" tr="Prob Sensörleri"/>
   <translation tag="Probe Speed" tr="Prob Hızı"/>
   <translation tag="Probe controls, accuracy test, and settings" tr="Prob kontrolleri, doğruluk testi ve ayarlar"/>
   <translation tag="Probing Bed Mesh" tr="Tabla Ağı Problanıyor"/>
@@ -1984,7 +1992,7 @@
   <translation tag="Remap Tool" tr="Yeniden Eşleme Aracı"/>
   <translation tag="Remap needs the HelixPrint plugin" tr="Remap&apos;in HelixPrint eklentisine ihtiyacı var"/>
   <translation tag="Remap…" tr="Yeniden eşle…"/>
-  <translation tag="Remember lane spool details across an eject" tr="Bir çıkarma sırasında kanal makara ayrıntılarını hatırlayın"/>
+  <translation tag="Remember slot spool details across an eject" tr="Makara çıkarılınca yuvadaki makara bilgilerini koru"/>
   <translation tag="Remove" tr="Kaldır"/>
   <translation tag="Remove PIN" tr="PIN&apos;i kaldır"/>
   <translation tag="Remove Spoolman?" tr="Spoolman kaldırılsın mı?"/>
@@ -2276,6 +2284,7 @@
   <translation tag="Slot %d: %.0fg of %.0fg needed" tr="Yuva %d: %.0fg / %.0fg gerekli"/>
   <translation tag="Slot 1" tr="Yuva 1"/>
   <translation tag="Slot {}" tr="Yuva {}"/>
+  <translation tag="Slot {} is blocked — manual intervention required" tr="Yuva {} bloke — elle müdahale gerekiyor"/>
   <translation tag="Slot {} matches." tr="Yuva {} eşleşir."/>
   <translation tag="Slot {} spool cleared" tr="Yuva {} makara temizlendi"/>
   <translation tag="Slot {} updated" tr="Yuva {} güncellendi"/>
@@ -2373,9 +2382,11 @@
   <translation tag="Summary" tr="Özet"/>
   <translation tag="Support, documentation, and version info" tr="Destek, belgeler ve sürüm bilgileri"/>
   <translation tag="Suppress periodic &apos;T:.../B:...&apos; status lines" tr="Periyodik &apos;T:.../B:...&apos; durum satırlarını gizle"/>
+  <translation tag="Suppress periodic temperature status lines" tr="Periyodik sıcaklık durum satırlarını gizle"/>
   <translation tag="Suppress raw debug output from printer firmware modules" tr="Yazıcı ürün yazılımı modüllerinden ham hata ayıklama çıktısını bastırın"/>
   <translation tag="Surfaces inherit app background tokens for light and dark modes." tr="Yüzeyler, açık ve koyu modlar için uygulama arka plan belirteçlerini devralır."/>
   <translation tag="Switch Printer" tr="Yazıcıyı Değiştir"/>
+  <translation tag="Switch Sensors" tr="Anahtar Sensörleri"/>
   <translation tag="Switch between light and dark themes" tr="Açık ve koyu temalar arasında geçiş yapın"/>
   <translation tag="Switch to v%s" tr="v%s&apos;a geç"/>
   <translation tag="Switched to T{}" tr="T{}&apos;a geçildi"/>
@@ -2464,8 +2475,8 @@
   <translation tag="The printer rejected the filament configuration. The print was not started." tr="Yazıcı filament yapılandırmasını reddetti. Yazdırma başlatılmadı."/>
   <translation tag="The printer&apos;s firmware chooses the backup spool itself" tr="Yazıcının ürün yazılımı, yedekleme makarasını kendisi seçer"/>
   <translation tag="The runout sensor indicates no filament is loaded. Start print anyway?" tr="Filament sensörü filament olmadığını bildiriyor. Yine de yazdırma başlatılsın mı?"/>
-  <translation tag="The toolhead has filament but no AMS lane reports it loaded. Pull it out manually before printing. Start anyway?" tr="Baskı kafasında filament var ancak hiçbir AMS kanalı bunu yüklü göstermiyor. Baskıdan önce filamenti elle çıkarın. Yine de başlatılsın mı?"/>
-  <translation tag="The toolhead has filament but no AMS lane reports it loaded. The printer may refuse to load a lane until it is cleared. Start anyway?" tr="Baskı kafasında filament var ancak hiçbir AMS kanalı bunu yüklü göstermiyor. Filament çıkarılana kadar yazıcı kanal yüklemeyi reddedebilir. Yine de başlatılsın mı?"/>
+  <translation tag="The toolhead has filament but no AMS slot reports it loaded. Pull it out manually before printing. Start anyway?" tr="Baskı kafasında filament var, ancak hiçbir AMS yuvası yüklü filament bildirmiyor. Baskıdan önce filamenti elle çıkarın. Yine de başlatılsın mı?"/>
+  <translation tag="The toolhead has filament but no AMS slot reports it loaded. The printer may refuse to load a slot until it is cleared. Start anyway?" tr="Baskı kafasında filament var, ancak hiçbir AMS yuvası yüklü filament bildirmiyor. Filament çıkarılana kadar yazıcı yuvadan yüklemeyi reddedebilir. Yine de başlatılsın mı?"/>
   <translation tag="The toolhead sensor indicates filament is already loaded. Proceed with load anyway?" tr="Baskı kafası sensörü filamentin zaten yüklendiğini gösterir. Yine de yüklemeye devam edilsin mi?"/>
   <translation tag="The toolhead sensor indicates no filament is present. Proceed with unload anyway?" tr="Baskı kafası sensörü filamentin mevcut olmadığını gösteriyor. Yine de boşaltma işlemine devam edilsin mi?"/>
   <translation tag="Theme" tr="Tema"/>
@@ -2549,7 +2560,7 @@
   <translation tag="Tool change failed: {}" tr="Takım değişimi başarısız oldu: {}"/>
   <translation tag="Tool mapping failed" tr="Araç eşleme başarısız oldu"/>
   <translation tag="Tool swap" tr="Takım değişimi"/>
-  <translation tag="Tool {} → Lane {}: no filament loaded." tr="Araç {} → Kanal {}: filament yüklü değil."/>
+  <translation tag="Tool {} → Slot {}: no filament loaded." tr="Araç {} → Yuva {}: filament yüklü değil."/>
   <translation tag="Toolhead" tr="Baskı kafası"/>
   <translation tag="Toolhead LED" tr="Baskı Kafası LED&apos;i"/>
   <translation tag="Toolhead Style" tr="Baskı kafası Stili"/>
@@ -2722,6 +2733,7 @@
   <translation tag="Widget Labels" tr="Widget Etiketleri"/>
   <translation tag="Width" tr="Genişlik"/>
   <translation tag="Width Sensor" tr="Genişlik Sensörü"/>
+  <translation tag="Width Sensors" tr="Genişlik Sensörleri"/>
   <translation tag="Wifi" tr="Wifi"/>
   <translation tag="Will not switch spools on runout" tr="Bittiğinde makaraları değiştirmeyecek"/>
   <translation tag="Wipe nozzle on silicone cleaning strip" tr="Nozülü silikon temizleme şeridine sil"/>
@@ -2811,6 +2823,7 @@
   <translation tag="of" tr="ile ilgili"/>
   <translation tag="off" tr="kapalı"/>
   <translation tag="or type a macro name" tr="veya bir makro adı yazın"/>
+  <translation tag="printer default" tr="yazıcı varsayılanı"/>
   <translation tag="prints" tr="baskılar"/>
   <translation tag="remaining" tr="geriye kalan"/>
   <translation tag="remaining before clog detection triggers" tr="Tıkanıklık algılama tetikleyicilerinden önce kalan süre"/>
@@ -2842,7 +2855,6 @@
   <translation tag="{} is installed but its backup-spool switching is turned off, so no automatic swap will happen." tr="{} kurulu ancak yedekleme makarası geçişi kapalı olduğundan otomatik takas gerçekleşmeyecek."/>
   <translation tag="{} is installed, but its backup-spool setting could not be read - do not count on an automatic swap." tr="{} kuruldu ancak yedekleme makara ayarı okunamadı; otomatik değiştirmeye güvenmeyin."/>
   <translation tag="{} is not set up on this printer" tr="{} bu yazıcıda kurulmamış"/>
-  <translation tag="{} lanes" tr="{} kanal"/>
   <translation tag="{} macro not configured" tr="{} makro yapılandırılmadı"/>
   <translation tag="{} may cause unintended changes. Are you sure?" tr="{} istenmeyen değişikliklere neden olabilir. Emin misin?"/>
   <translation tag="{} more taps to {} beta features" tr="{} {} beta özelliklerine daha fazla dokunuş"/>
@@ -2851,6 +2863,7 @@
   <translation tag="{} preset{}" tr="{} ön ayar{}"/>
   <translation tag="{} set to {}" tr="{} {} olarak ayarlandı"/>
   <translation tag="{} set to {} {}" tr="{} {} {} olarak ayarlandı"/>
+  <translation tag="{} slots" tr="{} yuva"/>
   <translation tag="{} started" tr="{} başladı"/>
   <translation tag="{} target set to {}°C" tr="{} hedef {}°C olarak ayarlandı"/>
   <translation tag="{} will switch to a slot whose filament type AND colour both match the active spool and whose own port sensor reads filament present." tr="{} hem filament türü hem de rengi aktif makarayla eşleşen ve kendi port sensörü mevcut filamenti okuyan bir yuvaya geçiş yapacaktır."/>

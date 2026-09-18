@@ -12,7 +12,7 @@ setup() {
 
 @test "devel: clean doc with file ref, :line ref, and live link passes" {
     mkdir -p "$BATS_TEST_TMPDIR/src"
-    # 50 lines so the doc's :42 cite lands inside the file (past-EOF check)
+    # The `:42` suffix names a line; the gate strips it and checks the file.
     for i in $(seq 50); do echo "line $i"; done > "$BATS_TEST_TMPDIR/src/zz_fixture_real.cpp"
     cat > "$FIX/good.md" <<'EOF'
 See `src/zz_fixture_real.cpp` and `src/zz_fixture_real.cpp:42` and
@@ -30,6 +30,15 @@ EOF
     run python3 "$CHECK" --devel "$FIX/bad.md"
     [ "$status" -eq 1 ]
     [[ "$output" == *"zz_fixture_missing_thing.cpp"* ]]
+}
+
+@test "devel: a Makefile citation is path-checked despite having no extension" {
+    cat > "$FIX/mk.md" <<'EOF'
+Cites `mk/zz_missing/Makefile#all` which does not exist.
+EOF
+    run python3 "$CHECK" --devel "$FIX/mk.md"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"zz_missing/Makefile"* ]]
 }
 
 @test "devel: dead relative markdown link fails" {
@@ -64,64 +73,27 @@ EOF
     [[ "$output" != *"lv_obj_t*"* ]]
 }
 
-@test "devel: cite past end of file fails" {
+@test "devel: an anchor citation names the file before the '#'" {
+    # A citation names a place inside the file - `path#symbol`. The fragment is
+    # not part of the path, so the gate must strip it and check the file.
     mkdir -p "$BATS_TEST_TMPDIR/src"
-    printf 'int foo(void);\n' > "$BATS_TEST_TMPDIR/src/zz_fixture_real.cpp"
-    cat > "$FIX/eof.md" <<'EOF'
-See `src/zz_fixture_real.cpp:9999` for the declaration.
-EOF
-    run python3 "$CHECK" --devel "$FIX/eof.md"
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"past the end of the file"* ]]
-}
-
-@test "devel: symbol-near-cite, symbol first form, drift fails" {
-    mkdir -p "$BATS_TEST_TMPDIR/src"
-    printf 'int other(void);\nint other2(void);\n' > "$BATS_TEST_TMPDIR/src/zz_fixture_real.cpp"
-    cat > "$FIX/cite_a.md" <<'EOF'
-`foo()` (`src/zz_fixture_real.cpp:1`) does the thing.
-EOF
-    run python3 "$CHECK" --devel "$FIX/cite_a.md"
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"Symbol-cite drift"* ]]
-    [[ "$output" == *"`foo()` cited at `src/zz_fixture_real.cpp:1`"* ]]
-}
-
-@test "devel: symbol-near-cite, cite first form, drift fails" {
-    mkdir -p "$BATS_TEST_TMPDIR/src"
-    printf 'int aaa(void);\n' > "$BATS_TEST_TMPDIR/src/zz_fixture_real.cpp"
-    cat > "$FIX/cite_b.md" <<'EOF'
-`src/zz_fixture_real.cpp:1` — `bar` is the entry point.
-EOF
-    run python3 "$CHECK" --devel "$FIX/cite_b.md"
-    [ "$status" -eq 1 ]
-    [[ "$output" == *"Symbol-cite drift"* ]]
-    [[ "$output" == *"`bar` cited at `src/zz_fixture_real.cpp:1`"* ]]
-}
-
-@test "devel: symbol present near cited line passes, including window edges" {
-    mkdir -p "$BATS_TEST_TMPDIR/src"
-    { printf 'noise\nnoise\n'; printf 'int widget_attach(void);\n'; printf 'noise\n'; } \
-        > "$BATS_TEST_TMPDIR/src/zz_fixture_real.cpp"
-    cat > "$FIX/cite_ok.md" <<'EOF'
-`attach()` (`src/zz_fixture_real.cpp:3`) and
-`src/zz_fixture_real.cpp:3` — `attach` both resolve: the symbol is on the
-exact line. A bare `src/zz_fixture_real.cpp:1` cite makes no symbol claim,
-so whatever sits on that line is none of the gate's business.
-EOF
-    run python3 "$CHECK" --devel "$FIX/cite_ok.md"
+    printf 'void widget_attach(void) {}\n' > "$BATS_TEST_TMPDIR/src/zz_fixture_real.cpp"
+    cat > "$FIX/anchor_ok.md" <<'MD'
+See `src/zz_fixture_real.cpp#widget_attach` for the entry point.
+MD
+    run python3 "$CHECK" --devel "$FIX/anchor_ok.md"
     [ "$status" -eq 0 ]
-    [[ "$output" == *"Symbol cites"* ]]
 }
 
-@test "devel: qualified symbol matches its final component" {
-    mkdir -p "$BATS_TEST_TMPDIR/src"
-    printf 'int Nav::shutdown(void);\n' > "$BATS_TEST_TMPDIR/src/zz_fixture_real.cpp"
-    cat > "$FIX/cite_qual.md" <<'EOF'
-`NavigationManager::shutdown()` (`src/zz_fixture_real.cpp:1`) runs last.
-EOF
-    run python3 "$CHECK" --devel "$FIX/cite_qual.md"
-    [ "$status" -eq 0 ]
+@test "devel: an anchor citation to a missing file fails the path check" {
+    # The fragment must not smuggle a dead path past the check: strip it, and
+    # what is left is a file that has to exist.
+    cat > "$FIX/anchor_bad.md" <<'MD'
+Cites `src/zz_fixture_missing_thing.cpp#some_symbol` which does not exist.
+MD
+    run python3 "$CHECK" --devel "$FIX/anchor_bad.md"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"zz_fixture_missing_thing.cpp#some_symbol"* ]]
 }
 
 @test "stale: report mode runs clean on a doc with no file cites" {
@@ -157,7 +129,7 @@ MD
     [ "$status" -eq 0 ]
 }
 
-@test "scope: .claude/worktrees is skipped, .claude/skills is not" {
+@test "scope: .claude/worktrees is skipped, .claude/skills and .claude/rules are not" {
     # The harness keeps its live agent checkouts under .claude/worktrees/, each
     # a COMPLETE copy of this repo — CLAUDE.md, docs/ and all. A by-name prune
     # cannot express "skip that but keep .claude/skills", so the walk descended
@@ -167,18 +139,21 @@ MD
     # them with. Nothing asserted the walk's scope, which is why it survived.
     REPO="$BATS_TEST_TMPDIR/scoperepo"
     mkdir -p "$REPO/.claude/worktrees/agent-deadbeef" "$REPO/.claude/skills/thing" \
-             "$REPO/docs/devel" "$REPO/src"
+             "$REPO/.claude/rules" "$REPO/docs/devel" "$REPO/src"
     echo 'Root doc.' > "$REPO/CLAUDE.md"
     echo 'A live agent copy of the root doc.' \
         > "$REPO/.claude/worktrees/agent-deadbeef/CLAUDE.md"
     printf -- '---\nname: thing\n---\nA real skill doc.\n' \
         > "$REPO/.claude/skills/thing/SKILL.md"
+    printf -- '---\npaths:\n  - "src/**/*"\n---\nA path-scoped rule.\n' \
+        > "$REPO/.claude/rules/rule.md"
     cd "$REPO"
 
     run python3 "$CHECK" --list
     [ "$status" -eq 0 ]
     # The skills doc is deliberately in scope...
     [[ "$output" == *".claude/skills/thing/SKILL.md"* ]]
+    [[ "$output" == *".claude/rules/rule.md"* ]]
     # ...and the agent worktree is deliberately not.
     [[ "$output" != *"agent-deadbeef"* ]]
     # The repo's own CLAUDE.md is still scanned, exactly once.

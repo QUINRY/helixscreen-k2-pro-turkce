@@ -331,10 +331,10 @@ LVGL_DIR := lib/lvgl
 # LVGL config discovery. Defined here (not further down) so it can travel inside
 # $(LVGL_INC): every flag set that compiles LVGL-dependent code then reaches
 # lv_conf.h via -I. (project root) + -DLV_CONF_INCLUDE_SIMPLE, instead of LVGL's
-# fragile '#include "../../lv_conf.h"' fallback. That fallback only resolves by
-# accident in a normal checkout and BREAKS when lib/lvgl is a symlink (git
-# worktrees — see scripts/setup-worktree.sh), which silently broke every
-# cross-compile from a worktree (splash + display-backend + watchdog sub-builds).
+# fragile '#include "../../lv_conf.h"' fallback. That fallback resolves only by
+# accident in a normal checkout and not at all wherever lib/lvgl does not sit two
+# levels below the tree holding lv_conf.h, which takes out the splash,
+# display-backend and watchdog sub-builds with it.
 # Carrying it in LVGL_INC means new LVGL sub-builds inherit correct discovery
 # automatically rather than each having to remember to append $(LV_CONF).
 LV_CONF := -DLV_CONF_INCLUDE_SIMPLE
@@ -453,8 +453,26 @@ ENABLE_MOCKS ?= yes
 # a silent no-op that still compiles and still links the backend.
 ifneq (,$(filter ad5m ad5m-br ad5x,$(PLATFORM_TARGET)))
     PWM_SOUND_CXXFLAGS := -DHELIX_HAS_PWM_SOUND
+    # Auto-export: the stock AD5M kernel ships the beeper channel unexported
+    # and nothing materializes pwm6, so initialize() writes the channel to
+    # pwmchip0/export first. ad5x is excluded: pwm6 unverified there, no test
+    # rig, large installed base - behavior must not change silently.
+    ifneq (,$(filter ad5m ad5m-br,$(PLATFORM_TARGET)))
+        PWM_AUTO_EXPORT_CXXFLAGS := -DHELIX_PWM_AUTO_EXPORT
+    endif
 else
     APP_SRCS := $(filter-out $(SRC_DIR)/system/pwm_sound_backend.cpp,$(APP_SRCS))
+endif
+
+# AD5X piezo via the jz_pwm DMA engine, exec'd through fx-pwm - there is no
+# sysfs pwmchip on the X2600, so the sysfs PWM backend above cannot drive it.
+# Gated to ad5x AND probed at runtime (/dev/jz_pwm + the fx-pwm binary): a
+# host build that happens to carry the binary simply falls through the
+# backend ladder, and remote-UI installs keep the M300 path.
+ifneq (,$(filter ad5x,$(PLATFORM_TARGET)))
+    JZ_PWM_CXXFLAGS := -DHELIX_HAS_JZ_PWM
+else
+    APP_SRCS := $(filter-out $(SRC_DIR)/system/jz_pwm_sound_backend.cpp,$(APP_SRCS))
 endif
 
 ifneq ($(ENABLE_MOCKS),yes)
@@ -970,36 +988,85 @@ ifeq ($(COVERAGE),1)
     LDFLAGS += --coverage
 endif
 
+# Fast linker for host builds. helix-tests links 18 GB of objects into a 5 GB
+# binary -- 99% of both is DWARF from `-O2 -g` -- and every mutation-gate hunk,
+# every `make test`, pays that link again. Measured on this tree, same objects,
+# same warm page cache: GNU ld 31s, lld 6s (cold cache: 73s vs 9s).
+#
+# Host only. Cross toolchains ship their own ld and are not all lld-capable, and
+# Yocto's LDFLAGS come from the recipe -- neither is ours to second-guess. macOS
+# already defaults to ld64, which does not have this problem.
+#
+# FAST_LINK=0 opts out (bisecting a link-order bug, or comparing against ld).
+FAST_LINK ?= 1
+ifeq ($(FAST_LINK),1)
+ifeq ($(CROSS_COMPILE),)
+ifneq ($(YOCTO_BUILD),yes)
+ifneq ($(UNAME_S),Darwin)
+    HOST_FAST_LD := $(shell command -v ld.lld 2>/dev/null)
+    ifneq ($(HOST_FAST_LD),)
+        LDFLAGS += -fuse-ld=lld
+    else
+        # Loud on purpose. Without lld this box silently pays ~25 extra seconds
+        # on every test link, and the person or agent waiting on it has no way
+        # to tell that from the build simply being big.
+        $(warning ⚠️  ld.lld not found — helix-tests will link with GNU ld and take ~25s longer per link.)
+        $(warning     Install it: sudo apt install lld   (or set FAST_LINK=0 to silence this.))
+    endif
+endif
+endif
+endif
+endif
+
 # Sound system — synth, sequencer, backends (PWM/M300/SDL/ALSA), themes
 # Tracker player — MOD/MED file playback with PCM samples (requires HELIX_HAS_SOUND)
 #
-# HELIX_HAS_SOUND:   Pi, x86, AD5M, native — any platform with audio output
-# HELIX_HAS_TRACKER: Pi, x86, native — platforms with multi-core CPU + audio
-# AD5M/AD5X: sound only (no tracker — single-core busy-wait kills prints)
-# Disabled entirely: K1, K2, MIPS — no audio hardware at all
+# HELIX_HAS_SOUND:   Pi, x86, AD5M family, native — any platform with audio output
+# HELIX_HAS_TRACKER: Pi, x86, native, ad5x — platforms cleared for tracker playback
+# ad5m/ad5m-br: tone-only. The PWM backend answers supports_render_source() false —
+#   the piezo demodulates a duty-modulated carrier as static — so tracker playback
+#   falls back to the set_voice note path on the sequencer thread: SCHED_OTHER, a
+#   2 ms tick, and no print-state gating anywhere in the sound path. That is the
+#   shape that starves the CPU running a print, so tracker stays off here until the
+#   note fallback is measured against a running print on the hardware.
+# ad5x: tracker on. The jz_pwm backend drives the tracker's PC-speaker path with
+#   per-note buffers, so no PCM render loop is involved.
+# K1/K2/MIPS: no audio hardware at all
 SOUND_CXXFLAGS :=
 TRACKER_CXXFLAGS :=
 ifneq (,$(filter pi pi-fbdev pi-both pi32 pi32-fbdev pi32-both x86 x86-fbdev x86-both,$(PLATFORM_TARGET)))
     SOUND_CXXFLAGS := -DHELIX_HAS_SOUND
     TRACKER_CXXFLAGS := -DHELIX_HAS_TRACKER
 else ifneq (,$(filter ad5m ad5m-br ad5x,$(PLATFORM_TARGET)))
-    # AD5M/AD5X: PWM buzzer for tone-mode SFX only.
-    # Tracker (MOD/MED) DISABLED — the PCM render thread's busy-wait loop
-    # starves the single-core CPU, killing active prints and blocking
-    # Moonraker commands (including firmware_restart).
+    # PWM buzzer for tone-mode SFX only. Auto-export still applies to
+    # ad5m/ad5m-br above; only tracker playback is withheld.
     SOUND_CXXFLAGS := -DHELIX_HAS_SOUND
+    ifneq (,$(filter ad5x,$(PLATFORM_TARGET)))
+        # ad5x: the jz_pwm backend drives the tracker's PC-speaker (synth
+        # fallback) path — per-note buffers, no PCM render loop involved.
+        TRACKER_CXXFLAGS := -DHELIX_HAS_TRACKER
+    endif
 else ifeq ($(PLATFORM_TARGET),native)
     SOUND_CXXFLAGS := -DHELIX_HAS_SOUND
     TRACKER_CXXFLAGS := -DHELIX_HAS_TRACKER
 endif
 # K1, K2, MIPS — no sound at all
-CXXFLAGS += $(SOUND_CXXFLAGS) $(TRACKER_CXXFLAGS) $(PWM_SOUND_CXXFLAGS)
+CXXFLAGS += $(SOUND_CXXFLAGS) $(TRACKER_CXXFLAGS) $(PWM_SOUND_CXXFLAGS) $(PWM_AUTO_EXPORT_CXXFLAGS) $(JZ_PWM_CXXFLAGS)
 
 # Feature gates — default ON for all platforms.
 # Disabled per-platform in mk/cross.mk for memory-constrained targets.
 HELIX_HAS_LABEL_PRINTER ?= 1
 HELIX_HAS_CFS ?= 1
 HELIX_HAS_IFS ?= 1
+# Vendor filament systems that are physically tied to one printer family. A
+# device build for printer X cannot meet vendor Y's hardware, so Y is dead
+# weight there. Kept ON for the generic hosts (pi/x86/native), which drive an
+# arbitrary printer over the network. AFC and Happy Hare are deliberately NOT
+# gated: both are user-installable Klipper add-ons that can appear on any
+# printer, so no platform can rule them out.
+HELIX_HAS_ACE ?= 1
+HELIX_HAS_QIDI ?= 1
+HELIX_HAS_SNAPMAKER ?= 1
 # Compile-out gates for the 2D gcode renderer and the bed-mesh 3D renderer —
 # code AND their big runtime buffers (ESP32-class targets set these to 0).
 HELIX_HAS_GCODE_VIEWER ?= 1
@@ -1011,13 +1078,26 @@ HELIX_HAS_PLUGINS ?= 1
 # Capture-control (settings, render, save-frames) is plain JSON-RPC and is NOT
 # gated — printers keep capturing timelapses even where the screen can't view them.
 HELIX_HAS_TIMELAPSE_VIEWER ?= 1
+# Compile-out gate for the belt-tuning UI. It needs klippy's UDS accelerometer
+# stream, so it only works co-located with klippy, and its widgets are dropped
+# from builds that cannot reach one.
+HELIX_HAS_BELT_TUNER ?= 1
+# Compile-out gate for the font rungs above the authored tier ladder. Only the
+# high-DPI UI scale factor reaches them, so a platform with a fixed panel and no
+# scale factor above 1.0 neither packs nor links those faces.
+HELIX_HAS_HIDPI_FONTS ?= 1
 CXXFLAGS += -DHELIX_HAS_LABEL_PRINTER=$(HELIX_HAS_LABEL_PRINTER) \
             -DHELIX_HAS_CFS=$(HELIX_HAS_CFS) \
             -DHELIX_HAS_IFS=$(HELIX_HAS_IFS) \
+            -DHELIX_HAS_ACE=$(HELIX_HAS_ACE) \
+            -DHELIX_HAS_QIDI=$(HELIX_HAS_QIDI) \
+            -DHELIX_HAS_SNAPMAKER=$(HELIX_HAS_SNAPMAKER) \
             -DHELIX_HAS_GCODE_VIEWER=$(HELIX_HAS_GCODE_VIEWER) \
             -DHELIX_HAS_BED_MESH_3D=$(HELIX_HAS_BED_MESH_3D) \
             -DHELIX_HAS_PLUGINS=$(HELIX_HAS_PLUGINS) \
-            -DHELIX_HAS_TIMELAPSE_VIEWER=$(HELIX_HAS_TIMELAPSE_VIEWER)
+            -DHELIX_HAS_TIMELAPSE_VIEWER=$(HELIX_HAS_TIMELAPSE_VIEWER) \
+            -DHELIX_HAS_BELT_TUNER=$(HELIX_HAS_BELT_TUNER) \
+            -DHELIX_HAS_HIDPI_FONTS=$(HELIX_HAS_HIDPI_FONTS)
 
 # Parallel build control
 # Auto-parallelizes builds: plain 'make' automatically uses -j$(NPROC).
@@ -1070,7 +1150,7 @@ MOCK_OBJS := $(patsubst $(TEST_MOCK_DIR)/%.cpp,$(OBJ_DIR)/tests/mocks/%.o,$(MOCK
 # Default target
 .DEFAULT_GOAL := all
 
-.PHONY: all build clean run test tests demo compile_commands compile_commands_full libhv-build apply-patches generate-fonts validate-fonts regen-fonts regen-doc-links check-doc-links regen-doc-anchors check-doc-anchors regen-lvgl-event-codes check-lvgl-event-codes update-mdi-cache verify-mdi-codepoints help check-deps install-deps venv-setup icon format format-staged screenshots tools moonraker-inspector strict quality setup translations symbols strip dev install regen-filaments
+.PHONY: all build clean run test tests demo compile_commands compile_commands_full libhv-build apply-patches generate-fonts validate-fonts regen-fonts check-doc-anchors docs-pinned regen-lvgl-event-codes check-lvgl-event-codes update-mdi-cache verify-mdi-codepoints help check-deps install-deps venv-setup icon format format-staged screenshots tools moonraker-inspector strict quality setup translations symbols strip dev install regen-filaments
 
 # Fast development build: -O0 skips optimization passes (~2x faster compilation)
 # Library code still builds at -O2 (via SUBMODULE_CFLAGS) since it rarely changes
@@ -1117,7 +1197,7 @@ help:
 	echo "  $${G}moonraker-inspector$${X} - Query Moonraker printer metadata"; \
 	echo "  $${G}validate-fonts$${X}    - Check all icons are in compiled fonts"; \
 	echo "  $${G}regen-fonts$${X}       - Regenerate MDI icon fonts"; \
-	echo "  $${G}regen-doc-links$${X}   - Re-pin doc citation line numbers, then relink the guide"; \
+	echo "  $${G}docs-pinned$${X}       - Render docs with real citation line numbers into build/"; \
 	echo "  $${G}regen-lvgl-event-codes$${X} - Mirror lv_event_code_t into the crash worker"; \
 	echo "  $${G}quality$${X}           - Run all quality checks"; \
 	echo "  $${G}icon$${X}              - Generate app icon from logo"; \
@@ -1197,6 +1277,8 @@ quality:
 # Generated contributors header — sourced from CONTRIBUTORS.txt (committed)
 # so cross-compile Docker builds and shallow CI checkouts produce correct output.
 CONTRIBUTORS_H := $(BUILD_DIR)/generated/contributors.h
+# Lines from this marker down in CONTRIBUTORS.txt are hand-maintained.
+CONTRIB_MARKER := \# --- no commit, but this exists because of them ---
 
 $(CONTRIBUTORS_H): CONTRIBUTORS.txt scripts/gen-contributors.sh
 	$(Q)BUILD_DIR=$(BUILD_DIR) ./scripts/gen-contributors.sh
@@ -1224,6 +1306,9 @@ $(OBJ_DIR)/system/helix_version.o: $(GIT_HASH_H)
 # contributors, then commit the result.
 .PHONY: update-contributors
 update-contributors:
+	@# Everything from MARKER down is hand-maintained (people with no commit:
+	@# field testers, bug reporters, firmware authors) and is preserved verbatim.
+	@sed -n '/^$(CONTRIB_MARKER)$$/,$$p' CONTRIBUTORS.txt > $(BUILD_DIR)/.contrib-extras 2>/dev/null || true
 	@{ \
 		git -c safe.directory='*' log --format='%aN'; \
 		git -c safe.directory='*' log --format='%(trailers:key=Co-authored-by,valueonly,unfold)' \
@@ -1233,6 +1318,8 @@ update-contributors:
 	} | sort -u \
 		| grep -ivE 'bot\b|\[bot\]|dependabot|github-actions|claude' \
 		| awk 'length >= 2' > CONTRIBUTORS.txt
+	@if [ -s $(BUILD_DIR)/.contrib-extras ]; then cat $(BUILD_DIR)/.contrib-extras >> CONTRIBUTORS.txt; fi
+	@rm -f $(BUILD_DIR)/.contrib-extras
 	@echo "$(GREEN)✓ CONTRIBUTORS.txt updated ($$(wc -l < CONTRIBUTORS.txt) contributors)$(RESET)"
 	@echo "  Review the diff and commit: git diff CONTRIBUTORS.txt"
 

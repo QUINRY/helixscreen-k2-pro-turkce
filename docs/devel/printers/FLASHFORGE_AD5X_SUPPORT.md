@@ -21,6 +21,31 @@ HelixScreen has a dedicated cross-compilation target for the FlashForge Adventur
 | Multi-Material | IFS (Intelligent Filament System), 4 spools, auto-switching |
 | SSH | `root@<ip>` (via ZMOD) |
 
+### Buzzer
+
+There is no host audio hardware and no sysfs PWM: the X2600's PWM2 IP is driven
+by the out-of-tree `soc_pwm.ko`, which registers the misc char device
+`/dev/jz_pwm` and never a `pwmchip`, so the PWM sysfs backend cannot probe (or
+steal backend selection) on this platform. The buzzer (pc12) is a host GPIO,
+unreachable from Klipper as configured — both MCUs are serial controller boards
+with no linux MCU — and the stock config set has no `[output_pin]` or beep
+section at all, so no output_pin object ever appears in objects/list.
+
+The working path is gcode to a macro that reaches the host GPIO from Klipper:
+ZMOD's AD5X config defines `[gcode_macro M300]` → `RUN_SHELL_COMMAND
+CMD=audio_freq`; Forge-X's macros/base.cfg ships `[gcode_macro M300]` wrapping
+the fork's native TONE command (whose tone_player backend is being ported to
+the cmd_pwm-compatible `fx-pwm` helper for this platform). HelixScreen's
+speaker detection therefore keys on the M300 macro (`parse_objects`,
+printer_discovery.h), and sound goes out as `M300 S<Hz> P<ms>` via the M300
+backend — S0 is the backend's silence form and is a no-op on both firmwares.
+Note for rigs: Forge-X's TONE wrapper drops every tone when the printer's
+`mod_params` `sound` variable is off — that mutes HelixScreen too, and looks
+identical to a broken sound path. A printer whose firmware handles M300
+without a macro and without an output_pin can be brought in by forcing the
+`speaker` capability override to `enable` in settings.json — that override
+installs the M300 backend too.
+
 ## Filesystem Layout
 
 The AD5X uses a FlashForge-specific layout, distinct from the Creality K1:
@@ -328,7 +353,7 @@ multicolor by code.
 
 > **Stock zMod has its own switchover.** Before any plugin is installed, `ANALOG_PRUTOK`
 > (`zmod_ifs.py:cmd_ANALOG_PRUTOK`) is wired to `head_switch_sensor`'s `runout_gcode`
-> (`ad5x_display_off.cfg:39-44`). zmod's user-facing name for this is **"Infinite Spool
+> (`ad5x_display_off.cfg`). zmod's user-facing name for this is **"Infinite Spool
 > Mode"**. Same type+colour+present match rule as the plugins. Always on, no toggle.
 > Confirmed from zmod 1.7.1 source and on-device by raza616.
 
@@ -346,7 +371,7 @@ Mostly unused by HelixScreen; `variable_backup` is the exception.
 | `variable_e_feedrates` | Per-tool extrusion feedrates |
 | `variable_kamp` | KAMP (adaptive bed mesh) enabled |
 | `variable_line_purge` | Purge line at print start |
-| `PAUSE REASON=` values | `jam`, `broken`, `runout`, `empty`, `backup`, `nobackup`, `loading` (the `nobackup` reason is bambufy-only, emitted on a backup-enabled runout with no same-type+colour match — `bambufy.cfg:149`) |
+| `PAUSE REASON=` values | `jam`, `broken`, `runout`, `empty`, `backup`, `nobackup`, `loading` (the `nobackup` reason is bambufy-only, emitted on a backup-enabled runout with no same-type+colour match — `bambufy.cfg`) |
 
 ### Known Issue: Zmod Slot Renumbering
 

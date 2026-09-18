@@ -4,7 +4,6 @@
 #include "panel_widget_manager.h"
 
 #include "ui_ams_mini_status.h"
-#include "ui_emergency_stop.h"
 #include "ui_notification.h"
 #include "ui_utils.h"
 
@@ -176,49 +175,6 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
         enabled_widgets.push_back(std::move(slot));
     }
 
-    // If firmware_restart is NOT already in the list (user disabled it),
-    // conditionally inject it as the LAST widget when Klipper is NOT READY.
-    // This ensures the restart button is always reachable during shutdown, error,
-    // or startup (e.g., stuck trying to connect to an MCU).
-    bool has_firmware_restart = false;
-    for (const auto& slot : enabled_widgets) {
-        if (slot.widget_id == "firmware_restart") {
-            has_firmware_restart = true;
-            break;
-        }
-    }
-    bool fw_restart_injected = false;
-    if (!has_firmware_restart) {
-        // Suppress injection until Moonraker has actually reported state — the
-        // klippy_state subject defaults to SHUTDOWN, which produced a brief
-        // firmware_restart widget flash on every launch once UpdateQueue began
-        // buffering (rather than dropping) freeze-window callbacks (1d13ed6b4).
-        lv_subject_t* conn = lv_xml_get_subject(nullptr, "printer_connection_state");
-        bool connected =
-            conn && lv_subject_get_int(conn) == static_cast<int>(ConnectionState::CONNECTED);
-        lv_subject_t* klippy = lv_xml_get_subject(nullptr, "klippy_state");
-        if (connected && klippy) {
-            int state = lv_subject_get_int(klippy);
-            // Don't inject the restart button for a transient SHUTDOWN caused by a
-            // SAVE_CONFIG or user-initiated restart — Klipper returns to READY on
-            // its own within seconds. is_expected_restart() is the same window the
-            // status icon and nav manager consult.
-            bool expected_restart = EmergencyStopOverlay::instance().is_expected_restart();
-            if (state != static_cast<int>(KlippyState::READY) && !expected_restart) {
-                const char* state_names[] = {"READY", "STARTUP", "SHUTDOWN", "ERROR"};
-                const char* name = (state >= 0 && state <= 3) ? state_names[state] : "UNKNOWN";
-                WidgetSlot slot;
-                slot.widget_id = "firmware_restart";
-                slot.component_name = "panel_widget_firmware_restart";
-                // Insert at front so auto-placement puts it upper-left (first in
-                // the free cell list), not bottom-right where it blocks real widgets.
-                enabled_widgets.insert(enabled_widgets.begin(), std::move(slot));
-                fw_restart_injected = true;
-                spdlog::debug("[PanelWidgetManager] Injected firmware_restart (Klipper {})", name);
-            }
-        }
-    }
-
     // Check if widget list is unchanged — skip teardown+rebuild if nothing changed.
     // Gate status is part of the key: a widget transitioning from gated→ungated
     // must trigger a rebuild so its cancel-icon overlay + OPA_40 are removed and
@@ -305,7 +261,13 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
             std::find_if(entries.begin(), entries.end(),
                          [&](const PanelWidgetEntry& e) { return e.id == slot.widget_id; });
 
-        if (entry_it != entries.end() && entry_it->has_grid_position()) {
+        // enabled_widgets is built from enabled entries only, so this is a guard
+        // on that invariant rather than a live filter. A disabled entry keeps
+        // whatever col/row it last held, and anchoring on that cell would let it
+        // outrank a user-anchored widget whose saved rectangle overlaps it.
+        // Every GridEditMode occupancy loop filters on enabled for the same
+        // reason.
+        if (entry_it != entries.end() && entry_it->enabled && entry_it->has_grid_position()) {
             int col = entry_it->col;
             int row = entry_it->row;
             // Clamp the SPAN to the grid before clamping the position. A span
@@ -373,9 +335,7 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
         auto cfg_it = std::find_if(mut_entries.begin(), mut_entries.end(),
                                    [&](const PanelWidgetEntry& e) { return e.id == widget_id; });
         if (cfg_it != mut_entries.end()) {
-            cfg_it->enabled = false;
-            cfg_it->col = -1;
-            cfg_it->row = -1;
+            cfg_it->disable_and_unplace();
         }
         const char* why = GridLayout::failure_text(reason);
         spdlog::info("[PanelWidgetManager] Disabled widget '{}' — {}", widget_id, why);
@@ -563,14 +523,7 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
     }
 
     for (const auto& f : failures) {
-        if (fw_restart_injected) {
-            // Grid is full only because the temporary firmware_restart widget is
-            // occupying a slot. Don't disable the widget or warn — it will get
-            // its space back once Klipper returns to READY.
-            spdlog::info("[PanelWidgetManager] Skipping widget '{}' — grid full due to "
-                         "temporary firmware_restart injection",
-                         f.widget_id);
-        } else if (f.reason == GridLayout::PlacementFailure::GridFull) {
+        if (f.reason == GridLayout::PlacementFailure::GridFull) {
             evict_for_full_grid(f.widget_id);
         } else {
             disable_unplaceable(f.widget_id, f.reason);
@@ -586,26 +539,30 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
         }
     }
 
-    // Write computed positions back to config entries and persist to disk.
-    // This ensures auto-placed positions survive the next load() call
-    // (get_widget_config reloads from the JSON store after mark_dirty).
-    // Only write positions for widgets that are enabled in config — skip
-    // temporarily injected widgets (e.g., firmware_restart during Klipper error)
-    // whose positions would block cells for real widgets on subsequent layouts.
-    // Never write back OR persist a layout computed while Klipper is not READY.
-    // When fw_restart_injected is true a temporary firmware_restart widget is
-    // occupying a grid cell, so this placement is not the user's intended layout.
-    //   - Saving it freezes the transient arrangement to disk, so it survives the
-    //     next boot (raza616: "tiles revert to a previous layout after any reset").
-    //   - Even just mutating the in-memory entries locks the transient slot in:
-    //     the gate observer rebuilds on the next klippy_state transition WITHOUT
-    //     reloading the cached config, so the following READY populate would see
-    //     an explicit position, never re-derive it, and never persist it.
-    // The widgets for THIS frame are placed from `placed` regardless (the per-cell
-    // assignment below uses it, not entry.col), so skipping the write-back only
-    // defers auto-placed positions to the next READY populate, which re-derives
-    // and persists them cleanly.
-    if (!fw_restart_injected) {
+    // Write computed positions back to config entries and persist to disk, so
+    // auto-placed positions survive the next load() call (get_widget_config
+    // reloads from the JSON store after mark_dirty). Only widgets that are
+    // enabled in config get a position written.
+    //
+    // Never persist a layout computed while a CONNECTED printer reports Klipper
+    // not READY. A populate in that state is not a view of the user's intended
+    // arrangement, and freezing it to disk is what makes tiles revert to a
+    // previous layout after a power cycle or a FIRMWARE_RESTART. The widgets for
+    // THIS frame are placed from `placed` regardless, so skipping the write-back
+    // only defers auto-placed positions to the next READY populate, which
+    // re-derives and persists them.
+    //
+    // The connection half is load-bearing: klippy_state reads SHUTDOWN before
+    // Moonraker has reported anything, so gating on it alone would also refuse
+    // the first write-back of every launch, and an auto-placed layout would
+    // never reach disk at all.
+    lv_subject_t* conn_now = lv_xml_get_subject(nullptr, "printer_connection_state");
+    lv_subject_t* klippy_now = lv_xml_get_subject(nullptr, "klippy_state");
+    const bool connected =
+        conn_now && lv_subject_get_int(conn_now) == static_cast<int>(ConnectionState::CONNECTED);
+    const bool klippy_not_ready =
+        klippy_now && lv_subject_get_int(klippy_now) != static_cast<int>(KlippyState::READY);
+    if (!(connected && klippy_not_ready)) {
         auto& mut_entries = widget_config.page_entries_mut(page_index);
         bool any_written = false;
         for (const auto& p : placed) {
@@ -939,8 +896,10 @@ PanelWidgetManager::populate_widgets(const std::string& panel_id, lv_obj_t* cont
             if (slot.instance && !slot.hardware_gated) {
                 slot.instance->attach(widget, lv_scr_act());
 
-                // Notify widget of its grid allocation and approximate pixel size
-                slot.instance->on_size_changed(
+                // Notify widget of its grid allocation and approximate pixel size.
+                // notify_size_changed() records it first, so a widget that rebuilds
+                // its contents later can lay them out against the same cell.
+                slot.instance->notify_size_changed(
                     p.colspan, p.rowspan,
                     static_cast<int>(grid_track_extent(metrics.cell_w, metrics.gutter, p.colspan)),
                     static_cast<int>(grid_track_extent(metrics.cell_h, metrics.gutter, p.rowspan)));
@@ -1004,15 +963,6 @@ std::vector<std::string> PanelWidgetManager::compute_visible_widget_ids(const st
         ids.push_back(gated ? entry.id + "~gated" : entry.id);
     }
 
-    // Conditional firmware_restart injection (same logic as populate_widgets)
-    bool has_fw_restart = std::find(ids.begin(), ids.end(), "firmware_restart") != ids.end();
-    if (!has_fw_restart) {
-        lv_subject_t* klippy = lv_xml_get_subject(nullptr, "klippy_state");
-        if (klippy && lv_subject_get_int(klippy) != static_cast<int>(KlippyState::READY)) {
-            ids.push_back("firmware_restart");
-        }
-    }
-
     return ids;
 }
 
@@ -1025,8 +975,7 @@ void PanelWidgetManager::setup_gate_observers(const std::string& panel_id,
 
     // Walk the registry and observe every distinct hardware_gate_subject —
     // these are the same names compute_visible_widget_ids consults, so this
-    // automatically tracks any new gated widget added in the future. Plus
-    // klippy_state, which drives firmware_restart conditional injection.
+    // automatically tracks any new gated widget added in the future.
     //
     // Each observer schedules a coalesced rebuild via lv_async_call:
     //   * The first gate firing in a tick sets rebuild_pending_[panel_id]=true
@@ -1080,7 +1029,6 @@ void PanelWidgetManager::setup_gate_observers(const std::string& panel_id,
         if (!dup)
             gate_names.push_back(def.hardware_gate_subject);
     }
-    gate_names.push_back("klippy_state");
 
     for (const char* name : gate_names) {
         lv_subject_t* subject = lv_xml_get_subject(nullptr, name);
@@ -1243,8 +1191,64 @@ PanelWidgetConfig& PanelWidgetManager::get_widget_config(const std::string& pane
 
 // -- PanelWidget base class --
 
+PanelWidget::~PanelWidget() {
+    // The tile tree can outlive this widget: the manager drops non-reused
+    // instances after a rebuild, and app shutdown destroys panels before
+    // lv_deinit(). Uninstall the delete hook while the object is still valid,
+    // or the tree's eventual teardown would call on_root_deleted_event() on
+    // freed memory. A null delete_hook_root_ means the tree already died (the
+    // hook fired) or detach() removed it — nothing left to uninstall.
+    uninstall_delete_hook();
+}
+
 void PanelWidget::record_interaction() {
     TelemetryManager::instance().notify_widget_interaction(id());
+}
+
+void PanelWidget::install_delete_hook(lv_obj_t* root) {
+    if (!root || delete_hook_root_ == root) {
+        return;
+    }
+    // A recycled instance may still hold the hook on the tree it was detached
+    // (or re-attached away) from. Take it off there before hooking the new
+    // root, or that tree's late deletion would fire into this widget while its
+    // pointers name the successor.
+    uninstall_delete_hook();
+
+    // The home panel owns this tree; a raw lv_obj_delete() gives the widget no
+    // other notice, and the queued observer handlers would run against the
+    // freed child pointers on the next drain.
+    // DECLARATIVE_OK: LV_EVENT_DELETE cleanup has no declarative equivalent.
+    lv_obj_add_event_cb(root, on_root_deleted_event, LV_EVENT_DELETE, this);
+    delete_hook_root_ = root;
+}
+
+void PanelWidget::uninstall_delete_hook() {
+    if (delete_hook_root_ && lv_is_initialized()) {
+        lv_obj_remove_event_cb_with_user_data(delete_hook_root_, on_root_deleted_event, this);
+    }
+    delete_hook_root_ = nullptr;
+}
+
+void PanelWidget::on_root_deleted_event(lv_event_t* e) {
+    auto* self = static_cast<PanelWidget*>(lv_event_get_user_data(e));
+    if (!self) {
+        return;
+    }
+    auto* dying = static_cast<lv_obj_t*>(lv_event_get_current_target(e));
+
+    // Only the tree the hook was installed for matters. install_delete_hook()
+    // moves the hook at attach() time, but a tree condemned without a detach
+    // (or any future path that swaps roots without going through attach) can
+    // still land its late delete event here while the successor's pointers are
+    // live — clearing those would blank a live tree. Same staleness skip as
+    // PowerPanel's and PrintStatusPanel's hooks.
+    if (dying != self->delete_hook_root_) {
+        return;
+    }
+
+    self->delete_hook_root_ = nullptr;
+    self->on_hooked_root_deleted();
 }
 
 void PanelWidget::save_widget_config(const nlohmann::json& config) {

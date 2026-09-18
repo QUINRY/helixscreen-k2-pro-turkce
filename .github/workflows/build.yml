@@ -2,9 +2,15 @@ name: Build
 
 on:
   push:
-    branches: [ main, "claude/**", "devel/**" ]
+    branches:
+      - main
+      - "claude/**"
+      # Report branches carry a worker's STATUS.md over a full tree. Nothing
+      # in them is code, and each push otherwise queues a whole build.
+      - "!claude/report-*"
+      - "release/**"
   pull_request:
-    branches: [ main, "devel/**" ]
+    branches: [ main, "release/**" ]
 
 jobs:
   compile-ubuntu:
@@ -48,6 +54,7 @@ jobs:
         timeout_minutes: 20
         max_attempts: 3
         command: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
           sudo apt-get update
           sudo apt-get install -y \
             libsdl2-dev \
@@ -111,10 +118,18 @@ jobs:
         git submodule status
         echo "Submodules initialized"
 
+    - name: Cache npm downloads
+      uses: actions/cache@v5
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles('package.json') }}
+        restore-keys: |
+          npm-${{ runner.os }}-
+
     - name: Install Node.js dependencies
       uses: nick-fields/retry@v4
       with:
-        timeout_minutes: 2
+        timeout_minutes: 6
         max_attempts: 3
         command: npm install
 
@@ -158,8 +173,14 @@ jobs:
 
     # `always()`: banking a partial ccache after a failed/timed-out build is the
     # whole point — see the restore step above.
+    #
+    # Only main and release/** save. The repo shares one 10 GB Actions cache and
+    # GitHub evicts LRU across all of it, so a 1.7 GB generation per work branch
+    # crowds out the entries every push restores from. A work branch still gets a
+    # warm start: the `ccache-ubuntu-22.04-` prefix above resolves to the default
+    # branch's generation, which is readable from every ref.
     - name: Save ccache
-      if: always()
+      if: always() && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
       uses: actions/cache/save@v5
       with:
         path: ~/.cache/ccache
@@ -214,6 +235,7 @@ jobs:
     # first log line, which surfaces as every pytest UI test erroring in setup.
     - name: Install runtime dependencies
       run: |
+        sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
         sudo apt-get update
         sudo apt-get install -y libsdl2-2.0-0 libgles2 libfmt-dev libcairo2 libpango-1.0-0 libpangocairo-1.0-0 libpng16-16 libjpeg8
 
@@ -300,6 +322,18 @@ jobs:
       timeout-minutes: 5
       run: pytest tests/ui/ -v --ignore=tests/ui/test_screens.py
 
+    # tests/ui/conftest.py writes a screenshot, an app log and a state dump per
+    # failing case. Without this they die with the runner, which is what makes a
+    # UI failure that does not reproduce locally undiagnosable.
+    - name: Upload UI failure artifacts
+      if: failure()
+      uses: actions/upload-artifact@v7
+      with:
+        name: ui-artifacts-${{ github.run_id }}
+        path: ui-artifacts/
+        if-no-files-found: ignore
+        retention-days: 7
+
   build-macos:
     name: Build (macOS 14)
     runs-on: macos-14
@@ -332,8 +366,13 @@ jobs:
         restore-keys: |
           deps-macos-14-
 
-    - name: Cache ccache
-      uses: actions/cache@v5
+    # Restore and save are split so the save can be limited to one ref. macOS is
+    # a development platform, never a deployment target, so this job is a
+    # portability check rather than something a release depends on - it does not
+    # earn a slice of the shared 10 GB cache on every long-lived branch. A
+    # release/** run still restores the default branch's generation.
+    - name: Restore ccache
+      uses: actions/cache/restore@v5
       with:
         path: ~/Library/Caches/ccache
         key: ccache-macos-14-${{ github.sha }}
@@ -346,10 +385,18 @@ jobs:
         git submodule status
         echo "Submodules initialized"
 
+    - name: Cache npm downloads
+      uses: actions/cache@v5
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles('package.json') }}
+        restore-keys: |
+          npm-${{ runner.os }}-
+
     - name: Install Node.js dependencies
       uses: nick-fields/retry@v4
       with:
-        timeout_minutes: 2
+        timeout_minutes: 6
         max_attempts: 3
         command: npm install
 
@@ -373,6 +420,13 @@ jobs:
         make -j$(sysctl -n hw.ncpu)
         echo "HelixScreen built successfully"
         ccache -s
+
+    - name: Save ccache
+      if: always() && github.ref == 'refs/heads/main'
+      uses: actions/cache/save@v5
+      with:
+        path: ~/Library/Caches/ccache
+        key: ccache-macos-14-${{ github.sha }}
 
     - name: Verify binary
       run: |
@@ -477,6 +531,7 @@ jobs:
         timeout_minutes: 20
         max_attempts: 3
         command: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome*.list
           sudo apt-get update
           sudo apt-get install -y \
             clang \
@@ -502,10 +557,18 @@ jobs:
         restore-keys: |
           ccache-x86-fbdev-
 
+    - name: Cache npm downloads
+      uses: actions/cache@v5
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles('package.json') }}
+        restore-keys: |
+          npm-${{ runner.os }}-
+
     - name: Install Node.js dependencies
       uses: nick-fields/retry@v4
       with:
-        timeout_minutes: 2
+        timeout_minutes: 6
         max_attempts: 3
         command: npm install
 

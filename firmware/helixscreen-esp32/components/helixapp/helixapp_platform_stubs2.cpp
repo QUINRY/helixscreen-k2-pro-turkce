@@ -179,7 +179,10 @@ SpoolmanOverlay& get_spoolman_overlay() {
 // here — so the no-op body leaves no binding unsatisfied.
 
 // src/ui/ui_panel_spoolman.cpp (DEFINE_GLOBAL_PANEL)
-SpoolmanPanel::SpoolmanPanel() = default;
+// The panel's SearchDebounce member has no default ctor (a search callback is
+// mandatory), so the stub constructs it with a null one - never fired, because
+// this target never creates the panel (create() below returns nullptr).
+SpoolmanPanel::SpoolmanPanel() : search_debounce_(nullptr) {}
 SpoolmanPanel::~SpoolmanPanel() = default;
 void SpoolmanPanel::init_subjects() {}
 void SpoolmanPanel::register_callbacks() {}
@@ -201,6 +204,10 @@ SpoolmanPanel& get_global_spoolman_panel() {
 // src/ui/ui_spoolman_list_view.cpp
 namespace helix::ui {
 SpoolmanListView::~SpoolmanListView() = default;
+// ContainerDeleteNet override (declared out-of-line in the header): without a
+// definition here the class's vtable never emits on this target and the
+// firmware link fails with an undefined _ZTV reference.
+void SpoolmanListView::on_netted_container_destroyed() {}
 
 // src/ui/ui_spoolman_context_menu.cpp
 SpoolmanContextMenu::SpoolmanContextMenu() = default;
@@ -217,6 +224,13 @@ void SpoolEditModal::on_hide() {}
 
 // src/printer/spoolman_types.cpp — no spools exist, so nothing survives a filter.
 std::vector<SpoolInfo> filter_spools(const std::vector<SpoolInfo>&, const std::string&) {
+    return {};
+}
+std::string build_searchable_text(const SpoolInfo&) {
+    return {};
+}
+std::vector<SpoolInfo> filter_spools(const std::vector<SpoolInfo>&, const std::string&,
+                                     const std::vector<std::string>&) {
     return {};
 }
 
@@ -427,6 +441,10 @@ spdlog::level::level_enum parse_level(const std::string&, spdlog::level::level_e
     return default_level;
 }
 void set_runtime_level(spdlog::level::level_enum) {}
+spdlog::level::level_enum effective_log_level() {
+    // No file/syslog sinks here, so the logger's own level is the level that runs.
+    return spdlog::get_level();
+}
 std::string effective_destination() {
     return std::string("console");
 }
@@ -661,6 +679,11 @@ std::atomic<bool> gcode_renderer_loaded{false};
 // The status callback is never invoked.
 void UpdateChecker::refresh_config_snapshot() {}
 void UpdateChecker::check_for_updates(Callback) {}
+// The About overlay seeds its channel rows from the effective channel. This
+// slice has no updater, so the effective channel is always the default.
+UpdateChecker::UpdateChannel UpdateChecker::get_channel() const {
+    return UpdateChannel::Stable;
+}
 // Release-channel switch: the real body re-checks and re-stamps the config from
 // the network, which this slice has no updater for.
 void UpdateChecker::on_channel_changed() {}

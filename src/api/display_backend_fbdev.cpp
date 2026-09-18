@@ -43,29 +43,16 @@ using helix::is_known_touchscreen_name;
 /**
  * @brief Check if an input device has INPUT_PROP_DIRECT set
  *
- * Reads /sys/class/input/eventN/device/properties and checks bit 0
- * (INPUT_PROP_DIRECT), which indicates a direct-input device like a
- * touchscreen (as opposed to a touchpad or mouse).
+ * Reads /sys/class/input/eventN/device/properties and tests INPUT_PROP_DIRECT,
+ * which marks a device that is touched directly (a touchscreen) rather than one
+ * that moves a cursor (a touchpad or pointing stick).
  *
  * @param event_num Event device number
  * @return true if INPUT_PROP_DIRECT is set
  */
 bool has_direct_input_prop(int event_num) {
     std::string path = "/sys/class/input/event" + std::to_string(event_num) + "/device/properties";
-    std::string props_str = helix::input::read_sysfs_line(path);
-    if (props_str.empty())
-        return false;
-
-    try {
-        // Properties file may have space-separated hex values; lowest bits are rightmost
-        size_t last_space = props_str.rfind(' ');
-        std::string last_hex =
-            (last_space != std::string::npos) ? props_str.substr(last_space + 1) : props_str;
-        unsigned long props = std::stoul(last_hex, nullptr, 16);
-        return (props & 0x1) != 0; // INPUT_PROP_DIRECT
-    } catch (...) {
-        return false;
-    }
+    return helix::parse_input_prop_direct(helix::input::read_sysfs_line(path));
 }
 
 } // anonymous namespace
@@ -421,16 +408,35 @@ lv_indev_t* DisplayBackendFbdev::create_input_pointer() {
         spdlog::info("[Fbdev Backend] Touch range source: environment override{}",
                      stored_range.valid ? " (stored calibration range ignored)" : "");
     } else if (stored_range.valid) {
-        if (!env_swap_override) {
-            lv_evdev_set_swap_axes(touch_, stored_range.swap_axes);
+        // A stored range solved on a rotated panel folds the rotation into
+        // (min,max,swap) and double-applies it at runtime
+        // (prestonbrown/helixscreen#1394). The range stage post-dates the
+        // rotation-blind solver by days, so any stored range on a rotated
+        // display is from the broken window: ignore it and ride the
+        // affine-only path. Asked of the display, not of `/display/rotate`,
+        // and via the same helper the calibration solver gates on - the key
+        // is only the request, and it differs from the applied rotation both
+        // ways (CLI/env rotation with no key; a failed DRM->fbdev rotation
+        // fallback leaving the key set on an unrotated display). This runs
+        // from create_input_pointer(), which DisplayManager calls after it
+        // applies rotation, so the display is already at its final rotation.
+        const int applied_rotation = display_rotation_degrees();
+        if (applied_rotation != 0) {
+            spdlog::warn("[Fbdev Backend] Ignoring stored touch range on a {}°-rotated display"
+                         " - solved through the rotation, affine-only path applies",
+                         applied_rotation);
+        } else {
+            if (!env_swap_override) {
+                lv_evdev_set_swap_axes(touch_, stored_range.swap_axes);
+            }
+            lv_evdev_set_calibration(touch_, stored_range.min_x, stored_range.min_y,
+                                     stored_range.max_x, stored_range.max_y);
+            spdlog::info("[Fbdev Backend] Touch range source: stored calibration "
+                         "X({}..{}) Y({}..{}) swap={}{}",
+                         stored_range.min_x, stored_range.max_x, stored_range.min_y,
+                         stored_range.max_y, stored_range.swap_axes,
+                         env_swap_override ? " (swap held by environment override)" : "");
         }
-        lv_evdev_set_calibration(touch_, stored_range.min_x, stored_range.min_y, stored_range.max_x,
-                                 stored_range.max_y);
-        spdlog::info("[Fbdev Backend] Touch range source: stored calibration "
-                     "X({}..{}) Y({}..{}) swap={}{}",
-                     stored_range.min_x, stored_range.max_x, stored_range.min_y, stored_range.max_y,
-                     stored_range.swap_axes,
-                     env_swap_override ? " (swap held by environment override)" : "");
     } else {
         spdlog::info("[Fbdev Backend] Touch range source: kernel/MT-declared ABS range");
     }

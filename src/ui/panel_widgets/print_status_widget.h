@@ -388,6 +388,11 @@ class PrintStatusWidget : public PanelWidget {
     RunoutGuidanceModal runout_modal_;
     bool runout_modal_shown_ = false;
 
+    /// Set once this widget has seen the runout sensor report filament present.
+    /// It separates the two ways the sensor can read empty while idle: an edge
+    /// this widget watched happen, and a state it found on arrival.
+    bool saw_filament_present_ = false;
+
     // Job queue
     helix::JobQueueModal job_queue_modal_;
 
@@ -417,7 +422,6 @@ class PrintStatusWidget : public PanelWidget {
         void resize_arc();
 
       private:
-        ObserverGuard arc_value_observer_;
         lv_obj_t* arc_widget_ = nullptr;
         std::string current_nozzle_override_ = "auto";
 
@@ -518,6 +522,13 @@ class PrintStatusWidget : public PanelWidget {
     // grid; if populate_page is mid-rebuild, grid_update reads freed track data
     // and SIGSEGVs (J2URYGSM AD5M / SY6JLLKJ / FFATPQWB Pi5).
     void defer_reset_print_card_to_idle();
+    // Schedule the active-print thumbnail write on the next LVGL tick. Same
+    // reasoning as defer_reset_print_card_to_idle() above - the observer body
+    // runs inside UpdateQueue::process_pending(), and lv_image_set_src there
+    // cascades into lv_obj_update_layout across a page grid populate_page may
+    // still be rebuilding. The path is copied because the subject can publish
+    // again before the tick fires.
+    void defer_apply_active_thumbnail(const char* path);
     void update_idle_compact_mode();
     void update_active_layout_mode();
     // Apply the imperative print-card row/column flex layout for is_column_.

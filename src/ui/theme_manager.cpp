@@ -95,6 +95,7 @@ int32_t responsive_vertical_dimension(lv_display_t* display) {
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <dirent.h>
@@ -402,6 +403,22 @@ lv_color_t theme_manager_get_contrast_color(lv_color_t bg_color) {
     // Dark background needs light text (dark palette has light-colored text for readability)
     // Light background needs dark text (light palette has dark-colored text for readability)
     return (brightness < 140) ? tm.dark_palette().text : tm.light_palette().text;
+}
+
+/// WCAG relative luminance of one 8-bit channel.
+static double srgb_channel_luminance(uint8_t v) {
+    const double c = v / 255.0;
+    return (c <= 0.03928) ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+}
+
+lv_color_t theme_manager_get_readable_on(lv_color_t fill) {
+    const double lum = 0.2126 * srgb_channel_luminance(fill.red) +
+                       0.7152 * srgb_channel_luminance(fill.green) +
+                       0.0722 * srgb_channel_luminance(fill.blue);
+    // Contrast against white is (1.05 / (lum + 0.05)); against black it is
+    // ((lum + 0.05) / 0.05). They cross where lum == sqrt(1.05 * 0.05) - 0.05.
+    constexpr double kCrossover = 0.1791; // sqrt(0.0525) - 0.05
+    return (lum > kCrossover) ? lv_color_hex(0x000000) : lv_color_hex(0xFFFFFF);
 }
 
 // ============================================================================
@@ -3037,10 +3054,10 @@ std::vector<std::string> theme_manager_find_xml_files(const char* directory) {
 std::unordered_map<std::string, std::string>
 theme_manager_parse_all_xml_for_element(const char* directory, const char* element_type) {
     // Build-time token table: skip the ~28-scan boot storm when the table is
-    // enabled and the caller wants the canonical ui_xml dir (tests and
-    // alternate dirs always scan live).
-    if (helix::theme_tokens::enabled() && directory &&
-        std::strcmp(directory, tm_ui_xml_dir()) == 0) {
+    // enabled, carries this element type, and the caller wants the canonical
+    // ui_xml dir (tests, alternate dirs and uncovered types always scan live).
+    if (helix::theme_tokens::answers_from_table(helix::theme_tokens::enabled(), element_type,
+                                                directory, tm_ui_xml_dir())) {
         return helix::theme_tokens::for_element(element_type);
     }
     std::unordered_map<std::string, std::string> token_values;
@@ -3055,8 +3072,8 @@ std::unordered_map<std::string, std::string>
 theme_manager_parse_all_xml_for_suffix(const char* directory, const char* element_type,
                                        const char* suffix) {
     // Build-time token table: same fast-path guard as _for_element above.
-    if (helix::theme_tokens::enabled() && directory &&
-        std::strcmp(directory, tm_ui_xml_dir()) == 0) {
+    if (helix::theme_tokens::answers_from_table(helix::theme_tokens::enabled(), element_type,
+                                                directory, tm_ui_xml_dir())) {
         return helix::theme_tokens::for_suffix(element_type, suffix);
     }
 

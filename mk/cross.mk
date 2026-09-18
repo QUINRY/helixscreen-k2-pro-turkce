@@ -245,6 +245,9 @@ else ifeq ($(PLATFORM_TARGET),ad5m)
     HELIX_HAS_LABEL_PRINTER := 0
     HELIX_HAS_CFS := 0
     HELIX_HAS_IFS := 0
+    HELIX_HAS_ACE := 0
+    HELIX_HAS_QIDI := 0
+    HELIX_HAS_SNAPMAKER := 0
     # -Wl,--gc-sections: Remove unused sections during linking (works with -ffunction-sections)
     # -flto: Must match compiler flag for LTO to work
     # -static: Fully static binary - no runtime dependencies on system libs
@@ -282,6 +285,9 @@ else ifeq ($(PLATFORM_TARGET),ad5m-br)
     HELIX_HAS_LABEL_PRINTER := 0
     HELIX_HAS_CFS := 0
     HELIX_HAS_IFS := 0
+    HELIX_HAS_ACE := 0
+    HELIX_HAS_QIDI := 0
+    HELIX_HAS_SNAPMAKER := 0
     # No -static — buildroot wants dynamic linking against its sysroot
     TARGET_LDFLAGS := -Wl,--gc-sections -flto -lstdc++fs
     ENABLE_SSL := yes
@@ -315,6 +321,11 @@ else ifeq ($(PLATFORM_TARGET),ad5x)
     TARGET_CFLAGS := -march=mips32r5 -mtune=mips32r5 -mabi=32 -mnan=2008 -mfp64 \
         -Os -flto -ffunction-sections -fdata-sections -fno-omit-frame-pointer -funwind-tables \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_AD5X
+    # AMS: IFS stays ON - the AD5X's own filament system. Do NOT copy ad5m's IFS=0 here.
+    HELIX_HAS_CFS := 0
+    HELIX_HAS_ACE := 0
+    HELIX_HAS_QIDI := 0
+    HELIX_HAS_SNAPMAKER := 0
     # -Wl,--gc-sections: Remove unused sections during linking (works with -ffunction-sections)
     # -flto: Must match compiler flag for LTO to work
     TARGET_LDFLAGS := -Wl,--gc-sections -flto
@@ -357,6 +368,12 @@ else ifeq ($(PLATFORM_TARGET),cc1)
     TARGET_CFLAGS := -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard -mtune=cortex-a7 \
         -Os -flto -ffunction-sections -fdata-sections -funwind-tables \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_CC1
+    # AMS: Centauri Carbon has no vendor AMS. AFC/Happy Hare stay ON (user-installable).
+    HELIX_HAS_CFS := 0
+    HELIX_HAS_IFS := 0
+    HELIX_HAS_ACE := 0
+    HELIX_HAS_QIDI := 0
+    HELIX_HAS_SNAPMAKER := 0
     # -Wl,--gc-sections: Remove unused sections during linking (works with -ffunction-sections)
     # -flto: Must match compiler flag for LTO to work
     # -static: Fully static binary - no runtime dependencies on system libs
@@ -423,6 +440,11 @@ else ifneq ($(filter mips k1,$(PLATFORM_TARGET)),)
         -fno-omit-frame-pointer -funwind-tables \
         -fmerge-all-constants -fno-ident \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_MIPS
+    # AMS: CFS stays ON - K1/K1C/K1 Max all ship a 'with CFS' variant in the printer DB.
+    HELIX_HAS_IFS := 0
+    HELIX_HAS_ACE := 0
+    HELIX_HAS_QIDI := 0
+    HELIX_HAS_SNAPMAKER := 0
     # Linker flags:
     # -Wl,--gc-sections: Remove unused sections (works with -ffunction-sections)
     # -flto=auto: Match compiler LTO flag, uses all CPUs
@@ -465,6 +487,11 @@ else ifeq ($(PLATFORM_TARGET),k1-dynamic)
         -isystem include/compat \
         -Wno-error=conversion -Wno-error=sign-conversion \
         -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_K1
+    # AMS: CFS stays ON - see the mips block.
+    HELIX_HAS_IFS := 0
+    HELIX_HAS_ACE := 0
+    HELIX_HAS_QIDI := 0
+    HELIX_HAS_SNAPMAKER := 0
     # Dynamic linking with NaN2008 dynamic linker
     # NO -static flag! System libs resolved at runtime on the K1.
     TARGET_LDFLAGS := -Wl,--gc-sections -Wl,-O2 -Wl,--as-needed \
@@ -501,6 +528,11 @@ else ifeq ($(PLATFORM_TARGET),k2)
         -fno-omit-frame-pointer -funwind-tables \
         -fmerge-all-constants -fno-ident \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_K2
+    # AMS: CFS stays ON - the K2 series is the flagship CFS printer.
+    HELIX_HAS_IFS := 0
+    HELIX_HAS_ACE := 0
+    HELIX_HAS_QIDI := 0
+    HELIX_HAS_SNAPMAKER := 0
     TARGET_LDFLAGS := -Wl,--gc-sections -Wl,-O2 -Wl,--as-needed -flto=auto -static
     # HTTPS is required for the update check, R2 self-update download, telemetry,
     # and crash/debug-bundle upload. (Local Moonraker is plain HTTP and works
@@ -532,6 +564,11 @@ else ifeq ($(PLATFORM_TARGET),snapmaker-u1)
     TARGET_CFLAGS := -march=armv8-a -fno-omit-frame-pointer -funwind-tables -Os -flto -ffunction-sections -fdata-sections \
         -I/usr/include/libdrm \
         -Wno-error=conversion -Wno-error=sign-conversion -DHELIX_RELEASE_BUILD -DHELIX_PLATFORM_SNAPMAKER_U1
+    # AMS: SNAPMAKER stays ON - this build IS the U1 with SnapSwap.
+    HELIX_HAS_CFS := 0
+    HELIX_HAS_IFS := 0
+    HELIX_HAS_ACE := 0
+    HELIX_HAS_QIDI := 0
     TARGET_LDFLAGS := -Wl,--gc-sections -flto -static-libstdc++ -static-libgcc
     SNAPMAKER_SKIP_LIBINPUT := yes
     ENABLE_SSL := yes
@@ -922,20 +959,22 @@ docker-ccache-args = -v "$(DOCKER_CCACHE_BASE)/$(1)":/ccache -e CCACHE_DIR=/ccac
 ensure-ccache-dir = @mkdir -p "$(DOCKER_CCACHE_BASE)/$(1)"
 
 # Worktree cross-build support.
-# scripts/setup-worktree.sh symlinks lib/<submodule> to the main checkout (absolute
-# paths) so a worktree builds fast without duplicating ~GB of submodules. But Docker
-# only bind-mounts $(CURDIR) at /src, so those absolute symlinks dangle inside the
-# container — the dependency check reports "LVGL not found" and relative LVGL includes
-# resolve to the wrong tree. When building from a worktree, also bind-mount the real
-# submodule tree at its own absolute path so every lib/* symlink resolves identically
-# inside and outside the container. Empty for a normal checkout, where lib/ already
-# lives under $(CURDIR). Detection: realpath of lib/lvgl is outside $(CURDIR).
-WORKTREE_LIB_REAL := $(patsubst %/,%,$(dir $(realpath lib/lvgl)))
-ifeq ($(findstring $(CURDIR)/,$(WORKTREE_LIB_REAL)/),)
-DOCKER_WORKTREE_MOUNT := $(if $(WORKTREE_LIB_REAL),-v "$(WORKTREE_LIB_REAL)":"$(WORKTREE_LIB_REAL)")
-else
-DOCKER_WORKTREE_MOUNT :=
-endif
+# scripts/setup-worktree.sh symlinks the unpatched lib/<submodule> entries to the
+# main checkout (absolute paths) so a worktree builds fast without duplicating ~GB
+# of submodules. But Docker only bind-mounts $(CURDIR) at /src, so those absolute
+# symlinks dangle inside the container — the dependency check reports a missing
+# library and relative includes resolve to the wrong tree. Also bind-mount the real
+# directory each of them points into, so every lib/* symlink resolves identically
+# inside and outside the container.
+#
+# Ask every lib/ entry where it really lives rather than probing one of them:
+# lvgl, libhv and helix-xml are private per-worktree checkouts that live under
+# $(CURDIR), so a single-entry probe reads a worktree full of symlinks as a normal
+# checkout and mounts nothing. Empty for a normal checkout, where every entry is
+# already under $(CURDIR).
+WORKTREE_LIB_REAL := $(sort $(foreach e,$(wildcard lib/*),\
+    $(if $(findstring $(CURDIR)/,$(realpath $(e))/),,$(patsubst %/,%,$(dir $(realpath $(e)))))))
+DOCKER_WORKTREE_MOUNT := $(foreach p,$(WORKTREE_LIB_REAL),-v "$(p)":"$(p)")
 
 # Build provenance. The same mount boundary hides the git metadata: a worktree's
 # .git is a FILE reading "gitdir: $(MAIN)/.git/worktrees/<name>", and that path
@@ -3115,6 +3154,7 @@ release-snapmaker-u1: | build/snapmaker-u1/bin/helix-screen
 	@mkdir -p $(RELEASE_DIR)/helixscreen/bin
 	@cp build/snapmaker-u1/bin/helix-screen $(RELEASE_DIR)/helixscreen/bin/
 	@if [ -f build/snapmaker-u1/bin/helix-splash ]; then cp build/snapmaker-u1/bin/helix-splash $(RELEASE_DIR)/helixscreen/bin/; fi
+	@if [ -f build/snapmaker-u1/bin/helix-watchdog ]; then cp build/snapmaker-u1/bin/helix-watchdog $(RELEASE_DIR)/helixscreen/bin/; fi
 	@cp scripts/helix-launcher.sh $(RELEASE_DIR)/helixscreen/bin/ 2>/dev/null || true
 	$(call release-copy-xml-config,$(RELEASE_DIR)/helixscreen)
 	@# Install Snapmaker U1 preset as default config (skips hardware wizard on first run)

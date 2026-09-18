@@ -59,10 +59,12 @@ Resolve design-token lookups from the compiled token table (`src/generated/theme
 | Property | Value |
 |----------|-------|
 | **Values** | `1` (use the compiled table), any other value (use the live scanner) |
-| **Default** | Unset - on for ESP32 builds (`ui_xml/` ships there as a read-only frogfs image), off for every other build |
+| **Default** | Unset - on for ESP32 builds (`ui_xml/` ships there as a read-only frogfs image) and cross-built release targets (`HELIX_RELEASE_BUILD`), off for native dev builds |
 | **File** | `src/ui/theme_token_table_runtime.cpp` |
 
-Only the first character matters: a value starting with `1` turns the table on, so `HELIX_TOKEN_TABLE=0` forces the live scanner back on - useful to confirm an edited token still parses before regenerating the table. A build can also flip its default on by defining `HELIX_TOKEN_TABLE_DEFAULT_ON`; no build defines it today.
+Only the first character matters: a value starting with `1` turns the table on, so `HELIX_TOKEN_TABLE=0` forces the live scanner back on - useful on a device to confirm an edited `ui_xml/` token still parses, and the only way to move tokens there without a rebuild. A build can also flip its default on by defining `HELIX_TOKEN_TABLE_DEFAULT_ON`, which nothing needs now that release builds default on.
+
+The table exists because aggregating tokens live reopens every top-level `ui_xml` file once per aggregation call, ~28 times a boot. That scan is most of what `theme_manager_init` spends on a slow filesystem - 7.2s of a 16.8s splash on a 480x272 QIDI Q2.
 
 ### `HELIX_DISPLAY_BACKEND`
 
@@ -873,6 +875,77 @@ The WiFi backend normally finds the control socket automatically: it auto-detect
 # Point HelixScreen at a vendor's non-standard control socket directory
 HELIX_WPA_SOCKET_DIR=/data/misc/wifi/sockets ./build/bin/helix-screen
 ```
+
+### `HELIX_WPA_NET_SYSFS`
+
+Override the sysfs directory the WiFi hardware probe scans for radio
+interfaces.
+
+The wpa backend's pre-flight check reads `/sys/class/net` looking for
+`wlan*`/`wlp*`/`wlx*`/`wifi*` interfaces with a `wireless` subdirectory, and
+refuses to start when none exist. This variable points that probe at a
+different tree. It exists for the fake-supplicant unit tests
+(`tests/test_helpers/wpa_fake_supplicant.h`), which provide a hermetic
+`wlan0` so the suite runs on machines without a radio (CI runners); no
+device deployment should ever need it.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute directory path to use in place of `/sys/class/net` |
+| **Default** | Unset — the real `/sys/class/net` |
+| **File** | `src/api/wifi_backend_wpa_supplicant.cpp` |
+
+### `HELIX_NETD_SOCKET`
+
+Override the control socket of the printer's network daemon (`netd`, the
+exclusive owner of WiFi/ethernet on the firmwares that ship it).
+
+Both the WiFi and Ethernet backends speak to the daemon over this AF_UNIX
+socket, and backend selection itself probes it. The daemon is detected by
+socket presence OR the on-disk binary — never by a version string, which is
+untrustworthy across these firmware releases. Set this only to repoint at a
+non-standard deployment or at a test double.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute path to an AF_UNIX SOCK_STREAM socket |
+| **Default** | `/run/netd.sock` |
+| **File** | `src/api/netd_protocol.cpp` |
+
+```bash
+# Run the app against a fake daemon on a dev box
+HELIX_NETD_SOCKET=/tmp/fake-netd.sock ./build/bin/helix-screen
+```
+
+Also the seam the netd unit tests use to drive the real backends against an
+in-test listener (`tests/unit/netd_test_server.h`).
+
+### `HELIX_NETD_BIN`
+
+Override the on-disk daemon binary path used as the second half of the
+presence probe when the socket is down (the daemon exists on disk even
+before it has created its socket at boot). When neither the socket nor an
+executable at this path exists, the netd backends stand down entirely and
+the factory falls through to NetworkManager/wpa_supplicant.
+
+| Property | Value |
+|----------|-------|
+| **Values** | Absolute path to an executable file |
+| **Default** | `/opt/config/mod/.bin/exec/netd` |
+| **File** | `src/api/netd_protocol.cpp` |
+
+```bash
+# Force the netd backends active on a dev box by naming any executable
+HELIX_NETD_BIN=/bin/true HELIX_NETD_SOCKET=/tmp/fake-netd.sock ./build/bin/helix-screen
+```
+
+Recovery-boot note: a boot that ships the daemon but runs the stock stack
+(the firmware's own netd-failure fallback, or a `SKIP_MOD_SOFT` boot) still
+selects the netd backends — the binary is present, so the probe commits.
+WiFi then reads unavailable until the daemon returns; Ethernet still shows
+kernel state (the netd ethernet backend falls back to the kernel reading
+when the daemon is unreachable). Point `HELIX_NETD_BIN` at a nonexistent
+path in `helixscreen.env` to make such a boot use the stock backends.
 
 ---
 

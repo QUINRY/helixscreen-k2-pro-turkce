@@ -21,7 +21,9 @@
 #include <algorithm>
 #include <cctype>
 #include <fstream>
+#include <tuple>
 #include <unordered_set>
+#include <vector>
 
 #ifdef __GLIBC__
 #include <malloc.h> // malloc_trim() — see PrinterDatabase::compact()
@@ -389,8 +391,25 @@ int count_z_steppers(const std::vector<std::string>& steppers) {
 // one. Build volume is shared by dozens of printers - it narrows a field, it
 // does not name a machine - so a printer whose ONLY evidence is its bed size
 // is not identified at all.
-bool is_corroborating_only(const std::string& type) {
-    return type == "build_volume_range";
+// Corroborating evidence can support an identification made on other grounds
+// but can never make one by itself.
+//
+// Build volumes are corroborating by default because dozens of printers share a
+// band. An entry whose volume really is distinctive opts back in with
+// "identifying": true -- a 120mm cube has no neighbours the way 220-250mm does.
+//
+// A heuristic naming something shared across vendors -- a chamber thermistor, an
+// MCU part number -- opts out with "corroborating": true. Those describe a class
+// of printer, not a model, and at identifying strength they outscore every real
+// signal a simpler machine has (prestonbrown/helixscreen#1489).
+bool is_corroborating_only(const json& heuristic) {
+    if (heuristic.value("corroborating", false)) {
+        return true;
+    }
+    if (heuristic.value("type", "") == "build_volume_range") {
+        return !heuristic.value("identifying", false);
+    }
+    return false;
 }
 
 // Check if build volume is within specified range
@@ -456,8 +475,10 @@ int execute_heuristic(const json& heuristic, const PrinterHardwareData& hardware
                           pattern, confidence);
             return confidence;
         }
-    } else if (type == "hostname_exclude") {
-        // If hostname matches this pattern, exclude this printer entirely
+    } else if (type == "hostname_exclude" || type == "led_exclude") {
+        // If the named field matches this pattern, exclude this printer entirely.
+        // Encodes hardware a model does not have: the plain AD5M is open-frame,
+        // so a chamber light means its enclosed sibling and not it.
         auto field_data = get_field_data(hardware, field);
         std::string pattern = heuristic.value("pattern", "");
         if (has_pattern(field_data, pattern)) {
@@ -691,10 +712,16 @@ PrinterDetectionResult execute_printer_heuristics(const json& printer,
         int confidence;
         std::string reason;
         bool corroborating; // may support a match, may never establish one
+        bool volume_based;  // came from a build_volume_range window
     };
     std::vector<HeuristicMatch> matches;
+    bool declares_kinematics = false;
+    bool kinematics_matched = false;
 
     for (const auto& heuristic : printer["heuristics"]) {
+        const bool is_kinematics = heuristic.value("type", "") == "kinematics_match";
+        declares_kinematics = declares_kinematics || is_kinematics;
+
         int confidence = execute_heuristic(heuristic, hardware);
         if (confidence == HEURISTIC_EXCLUDE) {
             spdlog::debug("[PrinterDetector] {} excluded by heuristic: {}", printer_name,
@@ -702,8 +729,10 @@ PrinterDetectionResult execute_printer_heuristics(const json& printer,
             return {"", 0, "", 0};
         }
         if (confidence > 0) {
+            kinematics_matched = kinematics_matched || is_kinematics;
             matches.push_back({confidence, heuristic.value("reason", ""),
-                               is_corroborating_only(heuristic.value("type", ""))});
+                               is_corroborating_only(heuristic),
+                               heuristic.value("type", "") == "build_volume_range"});
         }
     }
 
@@ -715,16 +744,31 @@ PrinterDetectionResult execute_printer_heuristics(const json& printer,
     std::sort(matches.begin(), matches.end(),
               [](const auto& a, const auto& b) { return a.confidence > b.confidence; });
 
-    // A build volume is shared by dozens of printers - at 215-235mm up to 15
-    // database windows cover the same point. It can support an identification
-    // made on other evidence, but it can never make one on its own, so the base
-    // score must come from a heuristic that actually names this printer. With
-    // nothing but volume matching, the printer scores nothing at all.
+    // The base score must come from a heuristic that actually names this printer,
+    // never from corroborating evidence alone: a build volume is shared by dozens
+    // of models (at 215-235mm up to 15 database windows cover the same point), and
+    // a chamber sensor or MCU part number is shared across whole vendors. With
+    // nothing but corroborating matches, the printer scores nothing at all.
     auto identifying = std::find_if(matches.begin(), matches.end(),
                                     [](const auto& m) { return !m.corroborating; });
     if (identifying == matches.end()) {
         spdlog::debug("[PrinterDetector] {} matched only corroborating evidence "
-                      "(build volume) - not identifying, scoring 0",
+                      "(build volume, chamber sensor, MCU) - not identifying, scoring 0",
+                      printer_name);
+        return {"", 0, "", 0};
+    }
+
+    // An opted-in volume may lead, but never on its own and never on the wrong
+    // motion system. A bed size is not an identification: a bare 120mm cartesian
+    // rig shares the Voron 0's window and is not a Voron 0. Requiring both another
+    // match and the entry's own kinematics keeps the opt-in from reintroducing the
+    // identify-on-size-alone failure that made a 500mm Geralkom auto-save as a
+    // Sovol.
+    if (identifying->volume_based &&
+        (matches.size() < 2 || (declares_kinematics && !kinematics_matched))) {
+        spdlog::debug("[PrinterDetector] {} led on an identifying volume without "
+                      "matching kinematics or any second match - a bed size alone is "
+                      "not an identification, scoring 0",
                       printer_name);
         return {"", 0, "", 0};
     }
@@ -748,7 +792,10 @@ PrinterDetectionResult execute_printer_heuristics(const json& printer,
     spdlog::debug("[PrinterDetector] {} scored {}% (base {} + bonus {} from {} matches)",
                   printer_name, combined, base_confidence, bonus, matches.size());
 
-    return {printer_name, combined, reason, static_cast<int>(matches.size()), base_confidence};
+    PrinterDetectionResult result{printer_name, combined, reason, static_cast<int>(matches.size()),
+                                  base_confidence};
+    result.uncapped_confidence = base_confidence + bonus;
+    return result;
 }
 } // namespace
 
@@ -782,9 +829,7 @@ PrinterDetectionResult PrinterDetector::detect(const PrinterHardwareData& hardwa
             g_database.reload();
         }
 
-        // Iterate through all printers in database and find best match
         PrinterDetectionResult best_match{"", 0, "No distinctive hardware detected"};
-        PrinterDetectionResult runner_up{"", 0, ""};
 
         if (!g_database.data.contains("printers") || !g_database.data["printers"].is_array()) {
             NOTIFY_ERROR(lv_tr("Printer database is corrupt"));
@@ -792,6 +837,22 @@ PrinterDetectionResult PrinterDetector::detect(const PrinterHardwareData& hardwa
                 "[PrinterDetector] Invalid database format: missing 'printers' array");
             return {"", 0, "Invalid printer database format"};
         }
+
+        // Candidates are separated by the machine they name. The image is the
+        // physical printer the user owns; the preset is a configuration applied
+        // to it, and a firmware variant of one printer is not a second answer to
+        // "which printer is this". So two entries picturing the same machine
+        // are interchangeable here, however their presets differ.
+        struct ScoredCandidate {
+            PrinterDetectionResult result;
+            std::string preset;
+            std::string image;
+
+            bool same_outcome_as(const ScoredCandidate& other) const {
+                return image == other.image;
+            }
+        };
+        std::vector<ScoredCandidate> candidates;
 
         for (const auto& printer : g_database.data["printers"]) {
             PrinterDetectionResult result = execute_printer_heuristics(printer, hardware);
@@ -812,35 +873,55 @@ PrinterDetectionResult PrinterDetector::detect(const PrinterHardwareData& hardwa
                 continue;
             }
 
-            auto beats = [](const PrinterDetectionResult& a, const PrinterDetectionResult& b) {
-                return a.confidence > b.confidence ||
-                       (a.confidence == b.confidence &&
-                        a.best_single_confidence > b.best_single_confidence) ||
-                       (a.confidence == b.confidence &&
-                        a.best_single_confidence == b.best_single_confidence &&
-                        a.match_count > b.match_count);
-            };
+            if (result.confidence <= 0) {
+                continue;
+            }
 
-            if (beats(result, best_match)) {
-                runner_up = best_match; // demote previous winner
-                best_match = result;
-                if (printer.contains("preset") && printer["preset"].is_string()) {
-                    best_match.preset = printer["preset"].get<std::string>();
-                } else {
-                    best_match.preset.clear();
+            std::string preset;
+            if (printer.contains("preset") && printer["preset"].is_string()) {
+                preset = printer["preset"].get<std::string>();
+            }
+            candidates.push_back(
+                {std::move(result), std::move(preset), printer.value("image", "")});
+        }
+
+        // Equal on every tiebreaker leaves database order deciding, so the sort
+        // has to be stable to keep answering the way the loop that fed it did.
+        std::stable_sort(candidates.begin(), candidates.end(),
+                         [](const ScoredCandidate& a, const ScoredCandidate& b) {
+                             return std::tie(b.result.confidence, b.result.best_single_confidence,
+                                             b.result.match_count) <
+                                    std::tie(a.result.confidence, a.result.best_single_confidence,
+                                             a.result.match_count);
+                         });
+
+        if (!candidates.empty()) {
+            const ScoredCandidate& winner = candidates.front();
+            best_match = winner.result;
+            best_match.preset = winner.preset;
+
+            for (const auto& candidate : candidates) {
+                if (candidate.result.confidence != best_match.confidence) {
+                    break; // sorted by confidence: the tied run ends here
                 }
-            } else if (result.confidence > 0 && beats(result, runner_up)) {
-                runner_up = result;
+                ++best_match.tied_count;
+            }
+
+            for (auto it = candidates.begin() + 1; it != candidates.end(); ++it) {
+                if (!it->same_outcome_as(winner)) {
+                    best_match.runner_up_type_name = it->result.type_name;
+                    best_match.runner_up_confidence = it->result.confidence;
+                    best_match.runner_up_uncapped_confidence = it->result.uncapped_confidence;
+                    break;
+                }
             }
         }
 
-        best_match.runner_up_type_name = runner_up.type_name;
-        best_match.runner_up_confidence = runner_up.confidence;
-
         if (best_match.confidence > 0) {
             spdlog::info("[PrinterDetector] Detection complete: {} (confidence: {}%, {} matches, "
-                         "reason: {})",
+                         "margin: {} over '{}', {} tied, reason: {})",
                          best_match.type_name, best_match.confidence, best_match.match_count,
+                         best_match.margin(), best_match.runner_up_type_name, best_match.tied_count,
                          best_match.reason);
         } else {
             spdlog::debug("[PrinterDetector] No distinctive fingerprints detected");
@@ -1839,6 +1920,23 @@ std::string PrinterDetector::apply_type_choice(Config* config, const std::string
     return applied;
 }
 
+namespace {
+/// Whether @p candidate names the same printer family as the installed @p family
+/// preset: the family itself, or one of its variants (`ad5m` covers `ad5m_pro`,
+/// `ad5m_pro_forgex`). The separator is required so that `ad5x` is not read as a
+/// variant of `ad5m`.
+bool preset_in_family(const std::string& candidate, const std::string& family) {
+    if (candidate.empty() || family.empty()) {
+        return false;
+    }
+    if (candidate == family) {
+        return true;
+    }
+    return candidate.size() > family.size() && candidate.compare(0, family.size(), family) == 0 &&
+           candidate[family.size()] == '_';
+}
+} // namespace
+
 bool PrinterDetector::auto_detect_and_save(const helix::PrinterDiscovery& discovery,
                                            Config* config) {
     if (!config) {
@@ -1863,6 +1961,14 @@ bool PrinterDetector::auto_detect_and_save(const helix::PrinterDiscovery& discov
         if (!saved_preset.empty()) {
             config->apply_preset_file(saved_preset);
         }
+        // Apply the saved type to PrinterState for the same reason the
+        // detected-type path does: it is what resolves the pre-print option
+        // set, the z-offset calibration strategy, the purge-line capability and
+        // the probe-type override. Skipping it leaves every one of those at its
+        // default, and the only other startup caller is PrinterImageWidget —
+        // so a user who takes that tile off the home screen silently gets a
+        // different calibration surface from one who keeps it.
+        get_printer_state().set_printer_type_sync(saved_type);
         // Still compact if database was loaded (e.g., by list building)
         compact_database();
         return false;
@@ -1872,23 +1978,52 @@ bool PrinterDetector::auto_detect_and_save(const helix::PrinterDiscovery& discov
     PrinterDetectionResult result = auto_detect(discovery);
 
     if (!meets_autosave_threshold(result)) {
-        // Ambiguous. Persist nothing: PRINTER_TYPE stays empty so the wizard's
-        // identify step offers its Custom/Other default for the user to correct,
-        // and a later reconnect with a fuller discovery snapshot gets another
-        // chance instead of being locked out by a non-empty saved type.
         spdlog::info("[PrinterDetector] Detection below auto-save bar (best '{}' at {}%, "
-                     "runner-up '{}' at {}%, need >={}%) - leaving printer type unset "
-                     "for the user to choose",
+                     "runner-up '{}' at {}%, margin {}, {} tied; need >={}% and margin >={})",
                      result.type_name, result.confidence, result.runner_up_type_name,
-                     result.runner_up_confidence, AUTOSAVE_MIN_CONFIDENCE);
-        // Deliberately NOT compacting: compact_database() strips the heuristics,
-        // and without them a later attempt could never match anything. Holding
-        // them is the cost of staying open to a better answer.
-        return false;
-    }
+                     result.runner_up_confidence, result.margin(), result.tied_count,
+                     AUTOSAVE_MIN_CONFIDENCE, DETECT_MIN_MARGIN);
 
-    spdlog::info("[PrinterDetector] Auto-detected printer: '{}' ({}% confidence, reason: {})",
-                 result.type_name, result.confidence, result.reason);
+        // Handing an ambiguous field back to the user assumes a step that asks.
+        // A platform package seeds its preset into settings.json, and the wizard
+        // skips every hardware step on a preset install - so on those machines
+        // nobody is ever asked, the type stays empty for good, and a known
+        // printer wears the generic image.
+        //
+        // The package named the machine family at install time, so an ambiguous
+        // field inside that family is still an answer: the winner is the variant
+        // carrying the most corroboration, and the family's own name is the
+        // floor under it.
+        const std::string installed_preset = config->get_preset();
+        std::string resolved;
+        if (!installed_preset.empty()) {
+            resolved = (result.detected() && preset_in_family(result.preset, installed_preset))
+                           ? result.type_name
+                           : get_name_for_preset(installed_preset);
+        }
+
+        if (resolved.empty()) {
+            // PRINTER_TYPE stays empty so the wizard's identify step offers its
+            // Custom/Other default for the user to correct, and a later reconnect
+            // with a fuller discovery snapshot gets another chance instead of
+            // being locked out by a non-empty saved type.
+            //
+            // Deliberately NOT compacting: compact_database() strips the heuristics,
+            // and without them a later attempt could never match anything. Holding
+            // them is the cost of staying open to a better answer.
+            spdlog::info("[PrinterDetector] Leaving printer type unset for the user to choose");
+            return false;
+        }
+
+        spdlog::info("[PrinterDetector] Preset '{}' install has no step that asks - resolving "
+                     "printer type to '{}'",
+                     installed_preset, resolved);
+        result.type_name = resolved;
+        result.preset = get_preset_for_name(resolved);
+    } else {
+        spdlog::info("[PrinterDetector] Auto-detected printer: '{}' ({}% confidence, reason: {})",
+                     result.type_name, result.confidence, result.reason);
+    }
 
     // Save to config
     config->set<std::string>(config->df() + helix::wizard::PRINTER_TYPE, result.type_name);
@@ -2017,7 +2152,7 @@ std::string PrinterDetector::screws_tilt_direction_override() {
 bool PrinterDetector::meets_autosave_threshold(const PrinterDetectionResult& result) {
     if (result.type_name.empty() || !result.detected())
         return false;
-    return result.confidence >= AUTOSAVE_MIN_CONFIDENCE;
+    return result.confidence >= AUTOSAVE_MIN_CONFIDENCE && !result.ambiguous();
 }
 
 const char* PrinterDetector::mismatch_decision_name(MismatchDecision decision) {
@@ -2028,6 +2163,8 @@ const char* PrinterDetector::mismatch_decision_name(MismatchDecision decision) {
         return "no detection";
     case MismatchDecision::ConfidenceTooLow:
         return "confidence below threshold";
+    case MismatchDecision::Ambiguous:
+        return "tied with a rival model";
     case MismatchDecision::MatchesSavedType:
         return "detected type matches saved type";
     case MismatchDecision::SavedTypeNotSpecific:
@@ -2086,13 +2223,18 @@ std::string PrinterDetector::canonical_type_name(const std::string& printer_name
 PrinterDetector::MismatchDecision
 PrinterDetector::classify_type_mismatch(const std::string& saved_type,
                                         const std::string& detected_type, int detected_confidence,
-                                        const std::string& flag_value) {
+                                        const std::string& flag_value, int detected_margin) {
     // Emptiness is checked before confidence so a no-detection pass is
     // distinguishable in the log from a real candidate that scored short.
     if (detected_type.empty())
         return MismatchDecision::NoDetection;
     if (detected_confidence < MISMATCH_MIN_CONFIDENCE)
         return MismatchDecision::ConfidenceTooLow;
+    // Ordered after the confidence test and before everything else: "scored 92
+    // and so did four other models" is a different diagnosis from "scored 68",
+    // and a debug bundle has to be able to tell them apart.
+    if (detected_margin < DETECT_MIN_MARGIN)
+        return MismatchDecision::Ambiguous;
     if (detected_type == saved_type)
         return MismatchDecision::MatchesSavedType;
     if (saved_type.empty() || saved_type == "Custom/Other" || saved_type == "Unknown")
@@ -2100,6 +2242,17 @@ PrinterDetector::classify_type_mismatch(const std::string& saved_type,
     if (flag_value == saved_type)
         return MismatchDecision::AlreadyDismissed;
     return MismatchDecision::Warn;
+}
+
+PrinterDetector::MismatchDecision
+PrinterDetector::classify_type_mismatch(const std::string& saved_type,
+                                        const PrinterDetectionResult& detected,
+                                        const std::string& flag_value) {
+    if (!detected.detected()) {
+        return MismatchDecision::NoDetection;
+    }
+    return classify_type_mismatch(saved_type, detected.type_name, detected.confidence, flag_value,
+                                  detected.margin());
 }
 
 bool PrinterDetector::should_warn_type_mismatch(const std::string& saved_type,

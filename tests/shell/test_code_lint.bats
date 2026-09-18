@@ -739,3 +739,116 @@ EOF
     [ "$status" -eq 0 ]
     [ -z "$output" ]
 }
+
+# --- ObserverGuard's move paths must clear the source's cleanup ---
+# A moved-from std::function is valid but UNSPECIFIED. libc++ keeps the target
+# when the callable fits its small-object buffer, and ObserverGuard's cleanup -
+# one captured pointer - does. A source that kept it frees the observer's
+# context from its own destructor while the destination keeps the observer
+# attached, so the next notify reads freed memory (#1446). libstdc++ empties the
+# source, so no test on this box can fail on it - which is exactly why the
+# invariant is pinned here instead.
+
+check_observer_guard_move_clears_cleanup() {
+    local file="$1"
+    local moves
+    moves=$(grep -n 'cleanup_.*other\.cleanup_' "$file")
+
+    if [ -z "$moves" ]; then
+        echo "could not locate ObserverGuard's move paths in $file"
+        return 1
+    fi
+
+    if [ "$(echo "$moves" | wc -l)" -ne 2 ]; then
+        echo "expected exactly 2 cleanup_ move sites (move ctor + move assignment), found:"
+        echo "$moves"
+        return 1
+    fi
+
+    if echo "$moves" | grep -q 'std::move'; then
+        echo "ObserverGuard move path uses std::move on cleanup_; a moved-from"
+        echo "std::function keeps its target on libc++, so the source frees the"
+        echo "observer context out from under the destination. Use std::exchange:"
+        echo "$moves" | grep 'std::move'
+        return 1
+    fi
+    return 0
+}
+
+# --- SubjectManager::deinit_all() must not log ---
+# A SubjectManager owned by a static (PrintStatusWidget::s_formatter_) reaches
+# deinit_all() through the C++ atexit chain. spdlog's registry is a lazily
+# constructed function-local static, so it registers for destruction after any
+# object built during dynamic initialization and is therefore torn down before
+# them: a log call here reads a freed logger. The empty-subjects early-out
+# spares an app that ran Application::shutdown(); a binary that never does -
+# every unit test - arrives with subjects still registered and takes the full
+# path, where the trace fires.
+
+check_deinit_all_does_not_log() {
+    local file="$1"
+    local body
+    body=$(awk '/void deinit_all\(\) \{/{f=1} f{print} f && /^    \}$/{exit}' "$file")
+
+    if [ -z "$body" ]; then
+        echo "could not locate SubjectManager::deinit_all() in $file"
+        return 1
+    fi
+
+    if echo "$body" | grep -q 'spdlog::'; then
+        echo "spdlog call inside deinit_all(), which runs during static destruction:"
+        echo "$body" | grep -n 'spdlog::'
+        return 1
+    fi
+    return 0
+}
+
+@test "ObserverGuard's move paths clear the moved-from cleanup" {
+    run check_observer_guard_move_clears_cleanup include/ui_observer_guard.h
+    [ "$status" -eq 0 ]
+}
+
+@test "the ObserverGuard move gate fires when std::move comes back" {
+    local mutated="${BATS_TEST_TMPDIR}/ui_observer_guard_moved.h"
+    sed -e 's@std::exchange(other\.cleanup_, nullptr)@std::move(other.cleanup_)@' \
+        include/ui_observer_guard.h > "$mutated"
+
+    run check_observer_guard_move_clears_cleanup "$mutated"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"libc++"* ]]
+}
+
+@test "the ObserverGuard move gate fails closed when a move path disappears" {
+    local mutated="${BATS_TEST_TMPDIR}/ui_observer_guard_dropped.h"
+    awk '/cleanup_.*other\.cleanup_/ && !seen { seen = 1; next } { print }' \
+        include/ui_observer_guard.h > "$mutated"
+
+    run check_observer_guard_move_clears_cleanup "$mutated"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"expected exactly 2"* ]]
+}
+
+@test "SubjectManager::deinit_all() makes no spdlog calls" {
+    run check_deinit_all_does_not_log include/subject_managed_panel.h
+    [ "$status" -eq 0 ]
+}
+
+@test "the deinit_all logging gate fires when a log call is reintroduced" {
+    local mutated="${BATS_TEST_TMPDIR}/subject_managed_panel_logs.h"
+    sed -e 's@^        subjects_.clear();@        spdlog::trace("clearing");\n        subjects_.clear();@' \
+        include/subject_managed_panel.h > "$mutated"
+
+    run check_deinit_all_does_not_log "$mutated"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"static destruction"* ]]
+}
+
+@test "the deinit_all logging gate fails closed when the function is renamed" {
+    local mutated="${BATS_TEST_TMPDIR}/subject_managed_panel_renamed.h"
+    sed -e 's@^    void deinit_all() {@    void deinit_everything() {@' \
+        include/subject_managed_panel.h > "$mutated"
+
+    run check_deinit_all_does_not_log "$mutated"
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"could not locate"* ]]
+}

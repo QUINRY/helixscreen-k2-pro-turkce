@@ -3,6 +3,7 @@
 #include "touch_calibration_wrapper.h"
 
 #include "config.h"
+#include "display_backend.h"
 #include "helix_display_telemetry.h"
 
 #include <spdlog/fmt/fmt.h>
@@ -122,9 +123,13 @@ void calibrated_read_cb(lv_indev_t* indev, lv_indev_data_t* data) {
 
     // Apply affine calibration if valid (for both PRESSED and RELEASED states)
     if (ctx->calibration.valid) {
+        // data->point is PANEL space: this callback runs before
+        // lv_display_rotate_point(). The affine was solved against logical,
+        // post-rotation targets, so it is placed rather than applied directly.
         helix::Point raw{static_cast<int>(data->point.x), static_cast<int>(data->point.y)};
-        helix::Point transformed = helix::transform_point(
-            ctx->calibration, raw, ctx->screen_width - 1, ctx->screen_height - 1);
+        helix::Point transformed = helix::apply_calibration_in_panel_space(
+            ctx->calibration, raw, ctx->calibration.capture_rotation, ctx->screen_width,
+            ctx->screen_height);
         data->point.x = transformed.x;
         data->point.y = transformed.y;
 
@@ -267,6 +272,13 @@ TouchCalibration load_touch_calibration() {
     }
 
     cal.valid = cfg->get<bool>("/input/calibration/valid", false);
+    // An absent key is not an unknown rotation: a record that predates the key was
+    // read by a runtime that fed the matrix panel-space points directly, which is
+    // exactly what a capture rotation of zero describes, so the struct's own
+    // default is the faithful reading. Taking the rotation in effect NOW instead
+    // would re-place a working matrix into a basis it was never solved in - a
+    // quarter turn out for anyone who rotated the display after calibrating.
+    cal.capture_rotation = cfg->get<int>("/input/calibration/rotation", cal.capture_rotation);
     if (!cal.valid) {
         // A stored evdev range IS a stored user calibration, even when it left no
         // affine behind - the common outcome on a panel square to the display, where

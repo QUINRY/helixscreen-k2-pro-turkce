@@ -2,12 +2,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "../test_helpers/config_test_access.h"
+#include "app_globals.h"
 #include "config.h"
 #include "data_root_resolver.h"
 #include "printer_detector.h"
 #include "printer_discovery.h"
 #include "printer_state.h"
+#include "wizard_config_paths.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -99,6 +103,43 @@ class PrinterDetectorFixture {
                                    .fans = {"fan", "heater_fan hotend_fan"},
                                    .leds = {},
                                    .hostname = "ender3-v2"};
+    }
+
+    // Qidi Q2 fingerprint as a stock machine reports itself (debug bundle
+    // NPN3LYBJ). Two fields are what a Q2 owner's snapshot really looks like
+    // and are easy to get wrong from a spec sheet:
+    //
+    //  - hostname is the Linaro rootfs default. It carries no vendor or model
+    //    string; `machine.system_info` is where "QIDI@Q2" lives.
+    //  - build_volume is the stepper travel Klipper resolves from configfile
+    //    (X[-1,275] Y[-1,295] = 276 x 296), which is what
+    //    PrinterDiscovery::parse_build_volume() stores and what
+    //    build_volume_range heuristics are scored against. It is ~45mm larger
+    //    than the 250x250 print area the bed mesh covers.
+    //
+    // The mainboard is an STM32F407; the MMU and toolhead MCUs are F401/F103.
+    // There is no RP2040 anywhere on this machine.
+    PrinterHardwareData qidi_q2_hardware() {
+        return PrinterHardwareData{
+            .heaters = {"extruder", "heater_bed", "heater_generic chamber"},
+            .sensors = {"temperature_sensor Chamber_Thermal_Protection_Sensor"},
+            .fans = {"fan_generic cooling_fan", "heater_fan hotend_fan",
+                     "controller_fan chamber_fan", "controller_fan board_fan",
+                     "fan_generic chamber_circulation_fan", "fan_generic auxiliary_cooling_fan"},
+            .leds = {"output_pin caselight"},
+            .hostname = "linaro-alip",
+            .printer_objects = {"heater_generic chamber",
+                                "temperature_sensor Chamber_Thermal_Protection_Sensor", "probe_air",
+                                "z_tilt", "bed_mesh", "exclude_object", "lis2dw",
+                                "gcode_macro M141", "gcode_macro M191", "gcode_macro M290",
+                                "gcode_macro M900", "gcode_macro M901", "gcode_macro M4029",
+                                "gcode_macro M4030", "gcode_macro M4031",
+                                "gcode_macro CLEAR_NOZZLE", "gcode_macro CLEAR_NOZZLE_PLR"},
+            .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1"},
+            .kinematics = "corexy",
+            .mcu = "stm32f407xx",
+            .mcu_list = {"stm32f407xx", "stm32f401xc", "stm32f103xe"},
+            .build_volume = {.x_min = -1, .x_max = 275, .y_min = -1, .y_max = 295, .z_max = 265}};
     }
 };
 
@@ -2605,6 +2646,334 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
     REQUIRE(result.type_name != "Qidi Max 4");
 }
 
+// ============================================================================
+// A real Qidi Q2, as its owner's machine reports itself
+// (prestonbrown/helixscreen#1431)
+// ============================================================================
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: a Q2 that reports no model string is ambiguous, not a Plus 4",
+                 "[printer][real_world][qidi][q2]") {
+    // Every enclosed QIDI fingerprints the same stock firmware - chamber heater,
+    // M141/M191/CLEAR_NOZZLE, corexy - and nothing in this snapshot names a
+    // model. Five entries therefore land on one score, and which of them is
+    // called the winner comes down to how many heuristics each was written
+    // with. The honest verdict is that we cannot tell.
+    auto result = PrinterDetector::detect(qidi_q2_hardware());
+
+    REQUIRE(result.detected());
+    CHECK(result.margin() == 0);
+    CHECK(result.tied_count > 1);
+
+    // Nothing is written into the config. A saved printer type short-circuits
+    // every later detection attempt, so a coin flip persisted here is permanent.
+    CHECK_FALSE(PrinterDetector::meets_autosave_threshold(result));
+
+    // And nobody is told their printer is a different model. Naming one of
+    // several equally-matched candidates sends the owner to correct a setting
+    // that was already right (prestonbrown/helixscreen#1431).
+    CHECK(PrinterDetector::classify_type_mismatch("Qidi Q2", result.type_name, result.confidence,
+                                                  "", result.margin()) ==
+          PrinterDetector::MismatchDecision::Ambiguous);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: a detection result carries its own margin into the warning "
+                 "decision",
+                 "[printer][detector][qidi][q2][mismatch]") {
+    // The overload the running app calls. It reads the margin off the result
+    // rather than being handed one, so a tie reaches the decision as a tie -
+    // the scalar form's margin defaults to "separated" when nobody supplies it,
+    // and a caller that lost the value would still warn on evidence that fits
+    // five models equally (prestonbrown/helixscreen#1431).
+    const auto tied = PrinterDetector::detect(qidi_q2_hardware());
+    REQUIRE(tied.detected());
+    REQUIRE(tied.margin() == 0);
+    CHECK(PrinterDetector::classify_type_mismatch("Qidi Max 4", tied, "") ==
+          PrinterDetector::MismatchDecision::Ambiguous);
+
+    // The counterpart, so declining a tie does not become declining everything:
+    // the same machine naming itself is separated, and does warn.
+    auto identified_hw = qidi_q2_hardware();
+    identified_hw.hostname = "QIDI@Q2";
+    const auto identified = PrinterDetector::detect(identified_hw);
+    REQUIRE(identified.margin() >= PrinterDetector::DETECT_MIN_MARGIN);
+    CHECK(PrinterDetector::classify_type_mismatch("Qidi Max 4", identified, "") ==
+          PrinterDetector::MismatchDecision::Warn);
+
+    // A pass that identified nothing is not a contradiction of anything.
+    PrinterDetectionResult undetected;
+    CHECK(PrinterDetector::classify_type_mismatch("Qidi Max 4", undetected, "") ==
+          PrinterDetector::MismatchDecision::NoDetection);
+}
+
+TEST_CASE("PrinterDetector: every decline reason names itself in a bundle",
+          "[detector][mismatch]") {
+    // These strings are the only record a debug bundle keeps of why no prompt
+    // appeared, so an unnamed value reads as "unknown" and loses the diagnosis.
+    using MD = PrinterDetector::MismatchDecision;
+    for (auto decision : {MD::Warn, MD::NoDetection, MD::ConfidenceTooLow, MD::Ambiguous,
+                          MD::MatchesSavedType, MD::SavedTypeNotSpecific, MD::AlreadyDismissed}) {
+        const std::string name = PrinterDetector::mismatch_decision_name(decision);
+        INFO("decision name: " << name);
+        CHECK_FALSE(name.empty());
+        CHECK(name != "unknown");
+    }
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: a Q2 that reports its model string is identified outright",
+                 "[printer][real_world][qidi][q2]") {
+    // What the machine.system_info model string buys. `machine_name` is the one
+    // field on this printer that names the machine rather than the rootfs it
+    // was imaged with, and discovery folds it into the identity string
+    // detection scores - so the same hardware that ties five ways without it
+    // resolves to one model with it.
+    auto hardware = qidi_q2_hardware();
+    hardware.hostname = "QIDI@Q2";
+
+    auto result = PrinterDetector::detect(hardware);
+
+    REQUIRE(result.detected());
+    CHECK(result.type_name == "Qidi Q2");
+
+    // The model half of the string is what separates it: its siblings match
+    // 'qidi' and stop there, so they keep the score the shared firmware earns
+    // while the Q2 takes a higher one.
+    CAPTURE(result.confidence, result.runner_up_type_name, result.runner_up_confidence,
+            result.margin());
+    CHECK(result.margin() >= PrinterDetector::DETECT_MIN_MARGIN);
+    CHECK(PrinterDetector::meets_autosave_threshold(result));
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: M4029 is QIDI range-wide, so it cannot pick a QIDI model",
+                 "[printer][qidi][q2]") {
+    // M4029 ships on the Q2, the Plus 4 and the Max 4 alike. Adding or removing
+    // it moves a QIDI machine's score, never its identity.
+    auto with_macro = qidi_q2_hardware();
+    auto without_macro = qidi_q2_hardware();
+
+    auto& objects = without_macro.printer_objects;
+    const size_t before = objects.size();
+    objects.erase(std::remove(objects.begin(), objects.end(), std::string("gcode_macro M4029")),
+                  objects.end());
+    REQUIRE(objects.size() == before - 1); // the fixture really carries the macro being removed
+
+    const auto with_result = PrinterDetector::detect(with_macro);
+    const auto without_result = PrinterDetector::detect(without_macro);
+
+    CHECK(with_result.type_name == without_result.type_name);
+    CHECK(with_result.type_name == "Qidi Q2");
+}
+
+namespace {
+/// The shipped database entry with this id. The suite runs from the repo root.
+nlohmann::json shipped_printer_entry(const std::string& printer_id) {
+    namespace fs = std::filesystem;
+    const fs::path db_path = fs::current_path() / "assets" / "config" / "printer_database.json";
+    REQUIRE(fs::exists(db_path));
+
+    std::ifstream in(db_path);
+    REQUIRE(in.is_open());
+    nlohmann::json db;
+    in >> db;
+
+    for (const auto& printer : db.at("printers")) {
+        if (printer.value("id", "") == printer_id) {
+            return printer;
+        }
+    }
+    FAIL("no printer database entry with id " << printer_id);
+    return {};
+}
+} // namespace
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: Qidi Q2 build volume window covers the extents it is scored "
+                 "against",
+                 "[printer][qidi][q2][build_volume]") {
+    // build_volume_range is compared against stepper travel, not the print
+    // area: check_build_volume_range() subtracts the position_min/position_max
+    // the configfile reports. A window drawn around the smaller mesh area can
+    // never match the machine it describes.
+    const auto& volume = qidi_q2_hardware().build_volume;
+    const float x_extent = volume.x_max - volume.x_min;
+    const float y_extent = volume.y_max - volume.y_min;
+
+    const auto entry = shipped_printer_entry("qidi_q2");
+    bool has_volume_heuristic = false;
+
+    for (const auto& heuristic : entry.at("heuristics")) {
+        if (heuristic.value("type", "") != "build_volume_range") {
+            continue;
+        }
+        has_volume_heuristic = true;
+        INFO("window X[" << heuristic.value("min_x", 0.0f) << "," << heuristic.value("max_x", 0.0f)
+                         << "] Y[" << heuristic.value("min_y", 0.0f) << ","
+                         << heuristic.value("max_y", 0.0f) << "] against extents " << x_extent
+                         << " x " << y_extent);
+        CHECK(heuristic.value("min_x", 0.0f) <= x_extent);
+        CHECK(heuristic.value("max_x", 0.0f) >= x_extent);
+        CHECK(heuristic.value("min_y", 0.0f) <= y_extent);
+        CHECK(heuristic.value("max_y", 0.0f) >= y_extent);
+    }
+
+    CHECK(has_volume_heuristic);
+}
+
+TEST_CASE("PrinterDetector: the Qidi Q2 entry claims no MCU the machine does not carry",
+          "[printer][qidi][q2][mcu]") {
+    // The Q2's three MCUs are an STM32F407 mainboard, an F401 on the MMU and an
+    // F103 on the toolhead. An mcu_match for a chip that is nowhere on the
+    // board is evidence the machine can never produce, so it only ever scores
+    // for someone else.
+    const auto entry = shipped_printer_entry("qidi_q2");
+
+    for (const auto& heuristic : entry.at("heuristics")) {
+        if (heuristic.value("type", "") != "mcu_match") {
+            continue;
+        }
+        std::string pattern = heuristic.value("pattern", "");
+        INFO("mcu_match pattern '" << pattern << "'");
+        std::transform(pattern.begin(), pattern.end(), pattern.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        CHECK(pattern.find("rp2040") == std::string::npos);
+    }
+}
+
+TEST_CASE("PrinterDetector: no QIDI entry claims the shared M4029 macro names one model",
+          "[printer][qidi][database]") {
+    // Several QIDI models ship M4029, so no entry may describe it as evidence
+    // for its own. A macro the whole range carries narrows a printer to the
+    // manufacturer and stops there; scored as a model discriminator it decides
+    // between siblings on nothing (prestonbrown/helixscreen#1431).
+    namespace fs = std::filesystem;
+    const fs::path db_path = fs::current_path() / "assets" / "config" / "printer_database.json";
+    REQUIRE(fs::exists(db_path));
+
+    std::ifstream in(db_path);
+    REQUIRE(in.is_open());
+    nlohmann::json db;
+    in >> db;
+
+    int carriers = 0;
+    for (const auto& printer : db.at("printers")) {
+        for (const auto& heuristic : printer.value("heuristics", nlohmann::json::array())) {
+            if (heuristic.value("type", "") != "macro_match" ||
+                heuristic.value("pattern", "") != "M4029") {
+                continue;
+            }
+            ++carriers;
+
+            std::string reason = heuristic.value("reason", "");
+            INFO(printer.value("name", "") << " scores M4029 as: " << reason);
+            std::transform(reason.begin(), reason.end(), reason.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            CHECK(reason.find("specific") == std::string::npos);
+        }
+    }
+
+    // The premise the rule rests on: more than one model ships it.
+    CHECK(carriers > 1);
+}
+
+TEST_CASE("PrinterDetector: the Qidi Q2 entry collects the stock QIDI macros it ships",
+          "[printer][qidi][q2][database]") {
+    // A stock Q2 reports all of these. An entry that leaves evidence its own
+    // machine produces uncollected scores below the siblings that gather it.
+    const auto entry = shipped_printer_entry("qidi_q2");
+
+    std::string collected;
+    for (const auto& heuristic : entry.at("heuristics")) {
+        if (heuristic.value("type", "") == "macro_match") {
+            collected += heuristic.value("pattern", "") + " ";
+        }
+    }
+    INFO("qidi_q2 macro_match patterns: " << collected);
+
+    for (const char* shipped : {"M141", "M191", "CLEAR_NOZZLE", "M4029"}) {
+        INFO("expected macro_match " << shipped);
+        CHECK(collected.find(std::string(shipped) + " ") != std::string::npos);
+    }
+}
+
+// ============================================================================
+// A score several models share is not an identification
+// ============================================================================
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: an exact tie between models is not a confident detection",
+                 "[printer][detection][autosave][tie]") {
+    // Stock QIDI firmware alone: a chamber heater and the shared M141/M191/
+    // CLEAR_NOZZLE macros, with nothing that names a model. Every enclosed QIDI
+    // entry fingerprints exactly this, so they all land on the same score and
+    // the winner comes down to database order.
+    PrinterHardwareData ambiguous{.heaters = {"extruder", "heater_bed", "heater_generic chamber"},
+                                  .sensors = {"temperature_sensor chamber"},
+                                  .fans = {"fan", "heater_fan hotend_fan"},
+                                  .leds = {},
+                                  .hostname = "linaro-alip",
+                                  .printer_objects = {"heater_generic chamber", "gcode_macro M141",
+                                                      "gcode_macro M191",
+                                                      "gcode_macro CLEAR_NOZZLE"},
+                                  .steppers = {"stepper_x", "stepper_y", "stepper_z", "stepper_z1"},
+                                  .kinematics = "corexy"};
+
+    const auto result = PrinterDetector::detect(ambiguous);
+
+    REQUIRE(result.detected());
+    REQUIRE(result.confidence == result.runner_up_confidence); // the tie is real
+    REQUIRE(result.type_name != result.runner_up_type_name);
+
+    // Two models are equally supported by this evidence. Writing either one
+    // into the config makes a coin flip permanent, because a non-empty printer
+    // type short-circuits every later detection attempt.
+    CHECK_FALSE(PrinterDetector::meets_autosave_threshold(result));
+}
+
+TEST_CASE("PrinterDetector: a separated winner is still auto-saved", "[detection][autosave][tie]") {
+    // The counterpart to the tie rule: declining a tie must not become
+    // declining everything with a runner-up.
+    PrinterDetectionResult separated;
+    separated.type_name = "Qidi Q2";
+    separated.confidence = 92;
+    separated.runner_up_type_name = "Qidi Plus 4";
+    separated.runner_up_confidence = 91;
+
+    CHECK(PrinterDetector::meets_autosave_threshold(separated));
+}
+
+// ============================================================================
+// Contradicting the user costs more evidence than filling a blank
+// ============================================================================
+
+TEST_CASE("PrinterDetector: telling a user their saved type is wrong needs at least as much "
+          "evidence as filling an unset one",
+          "[detector][autosave][mismatch]") {
+    using MD = PrinterDetector::MismatchDecision;
+
+    // A saved printer type is a statement the user made. Overriding it is a
+    // stronger claim than filling in a blank, so it cannot be the cheaper one.
+    CHECK(PrinterDetector::MISMATCH_MIN_CONFIDENCE >= PrinterDetector::AUTOSAVE_MIN_CONFIDENCE);
+
+    for (int confidence = PrinterDetector::MISMATCH_MIN_CONFIDENCE;
+         confidence < PrinterDetector::AUTOSAVE_MIN_CONFIDENCE; ++confidence) {
+        INFO("confidence " << confidence);
+        // Too weak to be written into an empty config, so too weak to tell
+        // someone the type they chose is wrong.
+        CHECK(PrinterDetector::classify_type_mismatch("Voron 2.4", "Qidi Plus 4", confidence, "") ==
+              MD::ConfidenceTooLow);
+    }
+
+    // The bar moving up must not silence the warning altogether: a detection
+    // strong enough to be persisted is strong enough to be raised.
+    CHECK(PrinterDetector::classify_type_mismatch("Voron 2.4", "Qidi Plus 4",
+                                                  PrinterDetector::AUTOSAVE_MIN_CONFIDENCE,
+                                                  "") == MD::Warn);
+    CHECK(PrinterDetector::classify_type_mismatch("Voron 2.4", "Qidi Plus 4", 100, "") == MD::Warn);
+}
+
 TEST_CASE_METHOD(PrinterDetectorFixture,
                  "PrinterDetector: stock Max 4 fingerprint detects Qidi Max 4",
                  "[printer][qidi][max4]") {
@@ -4581,9 +4950,13 @@ TEST_CASE("should_warn_type_mismatch table", "[detector][mismatch]") {
     SECTION("high-confidence different type warns") {
         REQUIRE(PD::should_warn_type_mismatch(ad5m, trident, 85, none));
     }
-    SECTION("boundary: 70 warns, 69 does not") {
-        REQUIRE(PD::should_warn_type_mismatch(ad5m, trident, 70, none));
-        REQUIRE_FALSE(PD::should_warn_type_mismatch(ad5m, trident, 69, none));
+    SECTION("boundary: the bar warns, one below it does not") {
+        // Read from the constant, not spelled out: the warning bar is derived
+        // from the auto-save bar so the two cannot land in an order where
+        // contradicting a user costs less evidence than filling a blank.
+        REQUIRE(PD::should_warn_type_mismatch(ad5m, trident, PD::MISMATCH_MIN_CONFIDENCE, none));
+        REQUIRE_FALSE(
+            PD::should_warn_type_mismatch(ad5m, trident, PD::MISMATCH_MIN_CONFIDENCE - 1, none));
     }
     SECTION("same type never warns") {
         REQUIRE_FALSE(PD::should_warn_type_mismatch(ad5m, ad5m, 95, none));
@@ -4757,15 +5130,17 @@ TEST_CASE("meets_autosave_threshold table", "[detector][autosave]") {
         REQUIRE(PD::meets_autosave_threshold(res(85, 0)));
         REQUIRE_FALSE(PD::meets_autosave_threshold(res(84, 0)));
     }
-    SECTION("a near-tied runner-up does not block the save") {
-        // Deliberate: the installer's seed gate also demands a 10-point lead,
-        // but in this database a near-tie is what a CORRECT detection looks
-        // like. A genuine AD5M Pro ties its own ForgeX twin at 100/100, and a
-        // genuine Voron 2.4 leads the V2.4-derived Sovol SV08 by only 9. Both
-        // are covered by dedicated fixtures below; these pin the predicate so
-        // a margin rule cannot be reintroduced without failing here first.
-        REQUIRE(PD::meets_autosave_threshold(res(100, 100)));
+    SECTION("a clear lead over the nearest rival outcome saves") {
+        // The runner-up is the best candidate offering a DIFFERENT outcome, so
+        // a gap here is a gap between two answers the user would tell apart.
         REQUIRE(PD::meets_autosave_threshold(res(100, 91)));
+        REQUIRE(PD::meets_autosave_threshold(res(100, 100 - PD::DETECT_MIN_MARGIN)));
+    }
+    SECTION("a rival outcome inside the margin blocks the save") {
+        // Writing either name into the config makes a coin flip permanent: a
+        // non-empty printer type short-circuits every later detection attempt.
+        REQUIRE_FALSE(PD::meets_autosave_threshold(res(100, 100)));
+        REQUIRE_FALSE(PD::meets_autosave_threshold(res(100, 101 - PD::DETECT_MIN_MARGIN)));
     }
     SECTION("undetected never saves") {
         REQUIRE_FALSE(PD::meets_autosave_threshold(res(0, 0)));
@@ -4897,11 +5272,11 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
         REQUIRE(PrinterDetector::meets_autosave_threshold(result));
     }
 
-    SECTION("without it, the family still holds - it degrades to the non-Pro sibling") {
-        // The chamber LED is what breaks the Pro-vs-5M tie, so a Pro that has
-        // lost it reads as a plain 5M. Worth pinning: the migration's downside
-        // is bounded at the adjacent sibling (one row away in the picker), not
-        // at a foreign brand or an empty type.
+    SECTION("without it, the family still holds and the tie is with its own sibling") {
+        // The chamber LED is the only thing separating the Pro entry from the
+        // plain 5M, so a Pro that has lost it matches the two identically. The
+        // migration's downside is bounded at the adjacent sibling - one row
+        // away in the picker - and never at a foreign brand.
         PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
                                      .sensors = {"tvocValue", "weightValue"},
                                      .fans = {"fan", "heater_fan hotend_fan"},
@@ -4909,9 +5284,16 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
                                      .hostname = "my-printer",
                                      .kinematics = "corexy"};
         auto result = PrinterDetector::detect(hardware);
-        CAPTURE(result.type_name, result.confidence);
+        CAPTURE(result.type_name, result.confidence, result.runner_up_type_name,
+                result.runner_up_confidence);
         REQUIRE(result.type_name == "FlashForge Adventurer 5M");
-        REQUIRE(PrinterDetector::meets_autosave_threshold(result));
+        REQUIRE(result.runner_up_type_name == "FlashForge Adventurer 5M Pro");
+
+        // Both fit this evidence exactly, so nothing is persisted and the
+        // wizard asks. Picking one here would make a coin flip permanent: a
+        // saved printer type short-circuits every later detection attempt.
+        REQUIRE(result.margin() == 0);
+        REQUIRE_FALSE(PrinterDetector::meets_autosave_threshold(result));
     }
 }
 
@@ -5052,6 +5434,108 @@ TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: a 500mm Geralkom keep
 }
 
 // ============================================================================
+// Class evidence vs model evidence
+// ============================================================================
+//
+// A chamber thermistor and an MCU part number describe a CLASS of printer, not a
+// model. Scored as identifying they outrank every signal a simpler machine has:
+// a Voron 0.2 with a chamber probe and an SKR Pico was reported as a Qidi X-Max 3
+// at 78%, because "chamber sensor" (70) and "rp2040" (45) both beat the Voron's
+// best evidence, plain CoreXY at 40.
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: a chamber sensor does not make a Voron a Qidi",
+                 "[printer][build_volume][detector]") {
+    // The reporter's rig: enclosed V0.2 on an RP2040 board, chamber thermistor,
+    // no hostname that names anything.
+    PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
+                                 .sensors = {"chamber_temp", "MCU_temp"},
+                                 .hostname = "printer",
+                                 .printer_objects = {"neopixel bed_light", "bed_mesh"},
+                                 .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+                                 .kinematics = "corexy",
+                                 .mcu = "rp2040",
+                                 .build_volume = BuildVolume{0, 120, 0, 120, 0}};
+    auto result = PrinterDetector::detect(hardware);
+    CAPTURE(result.type_name, result.confidence, result.reason);
+
+    REQUIRE(result.type_name == "Voron 0.2");
+    // The Qidi entries can still corroborate, but none of them may lead.
+    REQUIRE(result.type_name.find("Qidi") == std::string::npos);
+    // Well clear of the runner-up rather than a coin toss.
+    REQUIRE(result.confidence > result.runner_up_confidence + 20);
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: class evidence alone identifies nothing",
+                 "[printer][detector]") {
+    SECTION("a chamber sensor on a nameless corexy rig names no printer") {
+        // Every enclosed machine has these two. If they can identify, they pick
+        // whichever vendor happens to score the chamber sensor highest.
+        PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
+                                     .sensors = {"chamber_temp"},
+                                     .hostname = "printer",
+                                     .printer_objects = {"bed_mesh"},
+                                     .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+                                     .kinematics = "corexy",
+                                     .build_volume = BuildVolume{0, 250, 0, 250, 0}};
+        auto result = PrinterDetector::detect(hardware);
+        INFO("got " << result.type_name << " @" << result.confidence);
+        // CoreXY (40) may still lead somewhere, but the chamber sensor must not
+        // lift anyone to a confident answer.
+        REQUIRE(result.confidence < 70);
+    }
+
+    SECTION("an MCU part number on a nameless rig names no printer") {
+        PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
+                                     .hostname = "printer",
+                                     .printer_objects = {"bed_mesh"},
+                                     .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+                                     .kinematics = "cartesian",
+                                     .mcu = "stm32f103",
+                                     .build_volume = BuildVolume{0, 235, 0, 235, 0}};
+        auto result = PrinterDetector::detect(hardware);
+        INFO("got " << result.type_name << " @" << result.confidence);
+        REQUIRE(result.confidence < 70);
+    }
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: an identifying volume still needs corroboration",
+                 "[printer][build_volume][detector]") {
+    // The Voron 0 window is the one volume distinctive enough to lead. It must
+    // still not identify on its own, or a 120mm cartesian rig becomes a Voron 0
+    // the same way a 500mm Geralkom became a Sovol.
+    PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
+                                 .hostname = "printer",
+                                 .printer_objects = {},
+                                 .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+                                 .kinematics = "cartesian",
+                                 .build_volume = BuildVolume{0, 120, 0, 120, 0}};
+    auto result = PrinterDetector::detect(hardware);
+    CAPTURE(result.type_name, result.confidence);
+    REQUIRE(result.type_name != "Voron 0.2");
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture, "PrinterDetector: a real Qidi X-Max 3 is still identified",
+                 "[printer][detector]") {
+    // The demotion must cost the Qidi nothing when its own evidence is present:
+    // the chamber HEATER, the M141/M191 macros and the hostname all name it.
+    PrinterHardwareData hardware{.heaters = {"extruder", "heater_bed"},
+                                 .sensors = {"chamber"},
+                                 .hostname = "qidi-x-max-3",
+                                 .printer_objects = {"heater_generic chamber", "bed_mesh",
+                                                     "gcode_macro M141", "gcode_macro M191"},
+                                 .steppers = {"stepper_x", "stepper_y", "stepper_z"},
+                                 .kinematics = "corexy",
+                                 .mcu = "rp2040",
+                                 .build_volume = BuildVolume{0, 325, 0, 250, 0}};
+    auto result = PrinterDetector::detect(hardware);
+    CAPTURE(result.type_name, result.confidence);
+    REQUIRE(result.type_name == "Qidi X-Max 3");
+    REQUIRE(result.confidence >= 85);
+}
+
+// ============================================================================
 // Saved-vs-detected type mismatch: the decline reason
 // ============================================================================
 //
@@ -5073,10 +5557,16 @@ TEST_CASE("PrinterDetector: type mismatch decline reasons are distinguishable", 
     }
 
     SECTION("A near-miss reports ConfidenceTooLow and names the gap it missed") {
-        // 68 is the case the bundle could not tell apart from "no detection".
-        REQUIRE(PrinterDetector::classify_type_mismatch("Voron Trident", "Creality K2 Plus", 68,
-                                                        "") == MD::ConfidenceTooLow);
-        REQUIRE(PrinterDetector::MISMATCH_MIN_CONFIDENCE == 70);
+        REQUIRE(PrinterDetector::classify_type_mismatch(
+                    "Voron Trident", "Creality K2 Plus",
+                    PrinterDetector::MISMATCH_MIN_CONFIDENCE - 1, "") == MD::ConfidenceTooLow);
+    }
+
+    SECTION("A model that only tied its rivals reports Ambiguous, not a low score") {
+        // Scoring well and scoring uniquely are different claims, and a bundle
+        // has to say which one failed.
+        REQUIRE(PrinterDetector::classify_type_mismatch("Voron Trident", "Qidi Plus 4", 92, "",
+                                                        /*detected_margin=*/0) == MD::Ambiguous);
     }
 
     SECTION("Agreement reports MatchesSavedType") {
@@ -5193,4 +5683,222 @@ TEST_CASE_METHOD(PrinterDetectorFixture,
             result.reason);
     REQUIRE(result.type_name == "Voron Trident");
     REQUIRE(PrinterDetector::meets_autosave_threshold(result));
+}
+
+// A saved printer type must still reach PrinterState. The type resolves the
+// pre-print option set, the z-offset calibration strategy, the purge-line
+// capability and the probe-type override, and the only other startup caller of
+// set_printer_type_sync() is PrinterImageWidget — so without this, removing that
+// tile from the home screen changes the calibration surface.
+TEST_CASE_METHOD(helix::VariantPresetFixture,
+                 "auto_detect_and_save applies an already-saved type to PrinterState",
+                 "[printer_detector][regression]") {
+    SetUp();
+
+    get_printer_state().set_printer_type_sync("");
+    REQUIRE(get_printer_state().get_printer_type().empty());
+
+    config.set<std::string>(config.df() + helix::wizard::PRINTER_TYPE, "Voron 2.4");
+
+    helix::PrinterDiscovery hw;
+    hw.set_printer_objects({"extruder", "heater_bed", "quad_gantry_level"});
+
+    // Returns false: it short-circuited rather than running detection. That is
+    // the branch under test, not a failure.
+    const bool detected = PrinterDetector::auto_detect_and_save(hw, &config);
+    CHECK_FALSE(detected);
+
+    CHECK(get_printer_state().get_printer_type() == "Voron 2.4");
+
+    get_printer_state().set_printer_type_sync("");
+    TearDown();
+}
+
+// ============================================================================
+// Preset installs: nobody is asked, so detection has to decide
+// ============================================================================
+
+namespace {
+
+// The AD5M running Forge-X, as its own objects.list reports it. The Pro and the
+// plain machine share every line of this except the chamber light: the Pro's
+// enclosure is the whole physical difference between them, and the firmware is
+// identical either way.
+nlohmann::json ad5m_forgex_objects(bool chamber_light) {
+    nlohmann::json objects = {"gcode",
+                              "webhooks",
+                              "configfile",
+                              "mcu",
+                              "mcu eboard",
+                              "heaters",
+                              "heater_fan heat_fan",
+                              "fan_generic fanM106",
+                              "fan_generic chamber_fan",
+                              "fan_generic internal_fan",
+                              "fan_generic external_fan",
+                              "controller_fan driver_fan",
+                              "tmc2209 stepper_x",
+                              "tmc2209 stepper_y",
+                              "tmc2209 stepper_z",
+                              "tmc2209 extruder",
+                              "temperature_sensor weightValue",
+                              "temperature_sensor tvocValue",
+                              "filament_switch_sensor e0_sensor",
+                              "filament_switch_sensor e1_sensor",
+                              "bed_mesh",
+                              "probe",
+                              "mod_params",
+                              "resurrection",
+                              "firmware_retraction",
+                              "heater_bed",
+                              "extruder",
+                              "toolhead",
+                              "gcode_macro SUPPORT_FORGE_X",
+                              "gcode_macro LOAD_FILAMENT",
+                              "gcode_macro UNLOAD_FILAMENT"};
+    if (chamber_light) {
+        objects.push_back("led chamber_light");
+    }
+    return objects;
+}
+
+helix::PrinterDiscovery ad5m_forgex_discovery(bool chamber_light) {
+    helix::PrinterDiscovery discovery;
+    discovery.parse_objects(ad5m_forgex_objects(chamber_light));
+    discovery.set_hostname("ad5m");
+    discovery.set_kinematics("corexy");
+    return discovery;
+}
+
+// Elegoo Centauri Carbon on COSMOS firmware, from its objects.list. Its
+// hostname is "cosmos", which matches none of the database's Elegoo hostname
+// patterns, so it identifies on load_cell_probe alone and lands below the
+// auto-save bar.
+helix::PrinterDiscovery cc1_discovery() {
+    helix::PrinterDiscovery discovery;
+    discovery.parse_objects({"gcode",
+                             "webhooks",
+                             "configfile",
+                             "mcu",
+                             "mcu bed",
+                             "mcu hotend",
+                             "heaters",
+                             "heater_fan extruder",
+                             "fan",
+                             "heater_bed",
+                             "bed_mesh",
+                             "probe",
+                             "load_cell_probe",
+                             "filament_switch_sensor filament_sensor",
+                             "led case",
+                             "led hotend",
+                             "temperature_sensor chamber",
+                             "fan_generic aux_fan",
+                             "fan_generic case_fan",
+                             "temperature_sensor mcu_toolhead",
+                             "temperature_sensor mcu_bed",
+                             "temperature_host mainboard",
+                             "temperature_fan mainboard",
+                             "screws_tilt_adjust",
+                             "toolhead",
+                             "extruder"});
+    discovery.set_hostname("cosmos");
+    discovery.set_kinematics("corexy");
+    return discovery;
+}
+
+} // namespace
+
+// The two Forge-X entries carry identical identifying evidence: same firmware,
+// same sensors, same hostname. The enclosure is the only thing that tells the
+// machines apart, so the chamber light has to disqualify the open-frame entry
+// outright - scoring it merely higher leaves a tie, and a tie saves nothing and
+// leaves the printer wearing the generic image.
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: the chamber light separates an AD5M Pro from a plain 5M",
+                 "[printer][ad5m]") {
+    auto discovery = ad5m_forgex_discovery(true);
+    auto result = PrinterDetector::auto_detect(discovery);
+
+    CAPTURE(result.confidence, result.uncapped_confidence, result.runner_up_type_name,
+            result.runner_up_uncapped_confidence, result.margin(), result.reason);
+    REQUIRE(result.type_name == "FlashForge Adventurer 5M Pro (ForgeX)");
+    REQUIRE(PrinterDetector::meets_autosave_threshold(result));
+}
+
+TEST_CASE_METHOD(PrinterDetectorFixture,
+                 "PrinterDetector: a plain AD5M on Forge-X is not read as the Pro",
+                 "[printer][ad5m]") {
+    auto discovery = ad5m_forgex_discovery(false);
+    auto result = PrinterDetector::auto_detect(discovery);
+
+    CAPTURE(result.confidence, result.runner_up_type_name, result.margin(), result.reason);
+    REQUIRE(result.type_name == "FlashForge Adventurer 5M (ForgeX)");
+}
+
+// A platform package seeds its preset into settings.json, and the wizard skips
+// every hardware step on such an install — so a printer left without a type
+// there keeps the generic image for good. The seeded family makes the tie
+// answerable: both candidates are variants of the machine the package named.
+TEST_CASE_METHOD(helix::VariantPresetFixture,
+                 "auto_detect_and_save settles an ambiguous variant under the installed preset",
+                 "[printer_detector][preset]") {
+    SetUp();
+    get_printer_state().set_printer_type_sync("");
+
+    auto discovery = ad5m_forgex_discovery(false);
+
+    auto probe = PrinterDetector::auto_detect(discovery);
+    CAPTURE(probe.type_name, probe.confidence, probe.runner_up_type_name, probe.margin());
+    REQUIRE_FALSE(PrinterDetector::meets_autosave_threshold(probe));
+
+    config.set_preset("ad5m");
+    REQUIRE(PrinterDetector::auto_detect_and_save(discovery, &config));
+    CHECK(config.get<std::string>(config.df() + helix::wizard::PRINTER_TYPE, "") ==
+          "FlashForge Adventurer 5M (ForgeX)");
+    CHECK(get_printer_state().get_printer_type() == "FlashForge Adventurer 5M (ForgeX)");
+
+    get_printer_state().set_printer_type_sync("");
+    TearDown();
+}
+
+// Without a preset the wizard still asks, so an ambiguous field stays open for
+// the user to answer rather than being settled behind their back.
+TEST_CASE_METHOD(helix::VariantPresetFixture,
+                 "auto_detect_and_save leaves an ambiguous variant unset with no preset",
+                 "[printer_detector][preset]") {
+    SetUp();
+    get_printer_state().set_printer_type_sync("");
+
+    auto discovery = ad5m_forgex_discovery(false);
+    REQUIRE(config.get_preset().empty());
+
+    CHECK_FALSE(PrinterDetector::auto_detect_and_save(discovery, &config));
+    CHECK(config.get<std::string>(config.df() + helix::wizard::PRINTER_TYPE, "").empty());
+
+    get_printer_state().set_printer_type_sync("");
+    TearDown();
+}
+
+// A win too weak to auto-save is still the answer when the package already
+// named the machine and no step will ever ask.
+TEST_CASE_METHOD(helix::VariantPresetFixture,
+                 "auto_detect_and_save names the Centauri Carbon from its cc1 package",
+                 "[printer_detector][preset]") {
+    SetUp();
+    get_printer_state().set_printer_type_sync("");
+
+    auto discovery = cc1_discovery();
+
+    auto probe = PrinterDetector::auto_detect(discovery);
+    CAPTURE(probe.type_name, probe.confidence, probe.margin());
+    REQUIRE_FALSE(PrinterDetector::meets_autosave_threshold(probe));
+
+    config.set_preset("cc1");
+    REQUIRE(PrinterDetector::auto_detect_and_save(discovery, &config));
+    CHECK(config.get<std::string>(config.df() + helix::wizard::PRINTER_TYPE, "") ==
+          "Elegoo Centauri Carbon");
+
+    get_printer_state().set_printer_type_sync("");
+    TearDown();
 }

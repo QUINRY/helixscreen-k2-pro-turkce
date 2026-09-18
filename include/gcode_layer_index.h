@@ -98,7 +98,7 @@ struct LayerIndexStats {
     float min_z{std::numeric_limits<float>::max()};
     float max_z{std::numeric_limits<float>::lowest()};
     /// Model XY extents, accumulated over extruding moves during the index scan
-    /// and filtered by is_excluded_from_bounds() exactly like the full-file
+    /// and filtered by is_auxiliary_geometry() exactly like the full-file
     /// parser's global_bounding_box. Empty (min > max) if no extrusion was seen.
     ///
     /// Before this existed, GCodeLayerRenderer::auto_fit() estimated XY bounds by
@@ -128,7 +128,7 @@ struct LayerIndexStats {
     double build_time_ms{0.0};  ///< Time to build index
     std::string filament_color; ///< First filament color hex from metadata (palette[0]; legacy)
     std::vector<std::string>
-        filament_palette;       ///< All filament colors from semicolon-separated metadata
+        filament_palette; ///< All filament colors from separator-delimited metadata (';' or ',')
     int initial_tool_index{-1}; ///< First T-command seen in the file (-1 = none)
     /// Every distinct tool the file changes to, accumulated in the same single
     /// pass that finds the layer boundaries. The scan already visits every line,

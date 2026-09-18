@@ -31,7 +31,7 @@ constexpr lv_obj_flag_t PANEL_WIDGET_TILE_FLAG = LV_OBJ_FLAG_USER_3;
 /// Widgets that are pure XML binding (filament, probe, humidity, etc.) don't need this.
 class PanelWidget {
   public:
-    virtual ~PanelWidget() = default;
+    virtual ~PanelWidget();
 
     /// Called BEFORE lv_xml_create() — create and register any LVGL subjects
     /// that XML bindings depend on. Default is no-op.
@@ -75,6 +75,24 @@ class PanelWidget {
         (void)rowspan;
         (void)width_px;
         (void)height_px;
+    }
+
+    /// Record the granted cell size, then hand it to on_size_changed().
+    ///
+    /// PanelWidgetManager calls THIS, never on_size_changed() directly. The grid
+    /// announces a size once per attach, but a widget whose contents arrive later
+    /// -- tools discovered over the network, sensors registering -- rebuilds after
+    /// that announcement and has no size to lay the new objects out against. Every
+    /// widget that measures needs the last granted size, so the base keeps it
+    /// rather than each widget carrying its own copy
+    /// (prestonbrown/helixscreen#1490).
+    void notify_size_changed(int colspan, int rowspan, int width_px, int height_px) {
+        granted_colspan_ = colspan;
+        granted_rowspan_ = rowspan;
+        granted_width_px_ = width_px;
+        granted_height_px_ = height_px;
+        has_granted_size_ = true;
+        on_size_changed(colspan, rowspan, width_px, height_px);
     }
 
     /// Whether this widget currently has an overlay open (e.g. fullscreen camera).
@@ -125,8 +143,97 @@ class PanelWidget {
     /// Call from widget event callbacks to track user interactions for telemetry
     void record_interaction();
 
+    /**
+     * @brief Install the raw-delete hook on this widget's tile root.
+     *
+     * Call from attach() once the root object is known. detach() is called by
+     * every CURRENT deletion path before the tree is condemned, but a raw
+     * lv_obj_delete() of the home page container (screen teardown) gives the
+     * widget no call: the async-guard tokens stay live and the cached child
+     * pointers dangle, so the next UpdateQueue drain writes into freed widgets
+     * (#776 family — the PowerPanel/PrintStatusPanel LV_EVENT_DELETE hook,
+     * lifted into the base so every PanelWidget gets it once).
+     *
+     * Safe across rebuilds: removes the hook from a previously hooked root
+     * first, so a recycled instance never leaves one behind on the tree it was
+     * detached from (or re-attached away from).
+     */
+    void install_delete_hook(lv_obj_t* root);
+
+    /// The cell size the grid last granted. Zero until on_size_changed() has run,
+    /// which has_granted_size() distinguishes from a genuine zero.
+    bool has_granted_size() const {
+        return has_granted_size_;
+    }
+    int granted_colspan() const {
+        return granted_colspan_;
+    }
+    int granted_rowspan() const {
+        return granted_rowspan_;
+    }
+    int granted_width_px() const {
+        return granted_width_px_;
+    }
+    int granted_height_px() const {
+        return granted_height_px_;
+    }
+
+    /// Re-run the layout decision against the last granted size.
+    ///
+    /// Call at the end of any rebuild that recreates the objects on_size_changed()
+    /// lays out; without it those objects keep whatever the XML gave them. A no-op
+    /// before the first size arrives, so an early rebuild is harmless. Do not call
+    /// it from on_size_changed() itself.
+    ///
+    /// These accessors serve the REPLAY, and only notify_size_changed() fills
+    /// them: an override reached by a direct on_size_changed() call still sees
+    /// zeroes here. So an override must work from its own parameters and keep
+    /// whatever it needs later in its own members, exactly as ToolSwitcherWidget
+    /// does — reading these instead is a silent dependency on which caller you
+    /// arrived through.
+    void relayout_for_granted_size() {
+        if (has_granted_size_) {
+            on_size_changed(granted_colspan_, granted_rowspan_, granted_width_px_,
+                            granted_height_px_);
+        }
+    }
+
+    /**
+     * @brief Remove the hook installed by install_delete_hook().
+     *
+     * Call from detach(). The destructor calls it too, so a tile tree that
+     * outlives the widget (manager dropping a non-reused instance, app
+     * shutdown destroying panels before lv_deinit()) can never fire the hook
+     * on freed memory.
+     */
+    void uninstall_delete_hook();
+
+    /**
+     * @brief Override to drop cached child pointers when the tile tree dies
+     *        by anything other than detach().
+     *
+     * Runs inside LVGL's delete event, mid-teardown of the tree: pointer drops
+     * and async-guard expiry ONLY. Never reset observers or reparent/clean
+     * widgets from here — those need a live tree and a non-delete context
+     * (detach() and the destructor still run later on the normal paths).
+     */
+    virtual void on_hooked_root_deleted() {}
+
+  private:
+    static void on_root_deleted_event(lv_event_t* e);
+
+    /// Where the delete hook is currently installed. Kept separately from any
+    /// widget-owned root pointer because those are cleared by paths that
+    /// detach the tree before its deferred deletion runs.
+    lv_obj_t* delete_hook_root_ = nullptr;
+
   private:
     std::string panel_id_;
+    bool has_granted_size_ = false;
+    int granted_colspan_ = 0;
+    int granted_rowspan_ = 0;
+    int granted_width_px_ = 0;
+    int granted_height_px_ = 0;
 };
 
 /// Safe recovery of PanelWidget pointer from event callback.
